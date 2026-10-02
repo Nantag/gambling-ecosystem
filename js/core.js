@@ -2,6 +2,7 @@
 import {
   VENUES, GAMES, BUSINESSES, BIZ_GROWTH, BIZ_MILESTONES, CHARMS, RARITIES, CHARM_MAX_LEVEL,
   LUCK_CAP, ACE_DIVISOR, ACE_SHOP, ACHIEVEMENTS,
+  STAFF, UPGRADES, BIZ_UPGRADE_TIERS, EDGE_MIN, EDGE_MAX, EDGE_DEFAULT,
 } from './data.js';
 
 export const SAVE_KEY = 'gambling-ecosystem-save';
@@ -82,7 +83,11 @@ export function newState() {
     lastSeen: Date.now(),
     created: Date.now(),
     brokeAt: 0,
+    sim: freshSim(),
   };
+}
+function freshSim() {
+  return { rep: 50, edge: EDGE_DEFAULT, staff: {}, upgrades: {}, nextIncident: Date.now() + 120e3, incidents: 0 };
 }
 
 export let S = newState();
@@ -102,6 +107,8 @@ function migrate(data) {
   s.loan = { ...base.loan, ...(data.loan || {}) };
   s.settings = { ...base.settings, ...(data.settings || {}) };
   s.buffs = (data.buffs || []).filter(b => b.until > Date.now());
+  s.sim = { ...freshSim(), ...(data.sim || {}) };
+  s.sim.staff = { ...(s.sim.staff || {}) }; s.sim.upgrades = { ...(s.sim.upgrades || {}) };
   s.v = VERSION;
   return s;
 }
@@ -143,6 +150,11 @@ export function mods() {
     if (c.kind.startsWith('profit:')) { const g = c.kind.split(':')[1]; m.profit[g] = (m.profit[g] || 0) + v; }
     else m[c.kind] += v;
   }
+  for (const u of ownedUpgrades()) {
+    if (u.kind.startsWith('profit:')) { const g = u.kind.split(':')[1]; m.profit[g] = (m.profit[g] || 0) + u.value; }
+    else if (u.kind === 'luck') m.luck += u.value;
+    else if (u.kind === 'offline') m.offline += u.value;
+  }
   const achCount = Object.keys(S.ach).length;
   m.ach = achCount * 2;                    // +2% everything per achievement
   m.levelBonus = (S.level - 1) * 2;        // +2% winnings per level
@@ -180,19 +192,91 @@ export function bizMaxAffordable(b) {
   const k = b.cost * BIZ_GROWTH ** owned;
   return Math.max(0, Math.floor(Math.log(S.chips * (BIZ_GROWTH - 1) / k + 1) / Math.log(BIZ_GROWTH)));
 }
-export const bizMilestoneMult = id => 2 ** BIZ_MILESTONES.filter(m => bizCount(id) >= m).length;
+export const bizMilestoneMult = id => 2 ** BIZ_MILESTONES.filter(m => bizCount(id) >= m).length
+  * 2 ** BIZ_UPGRADE_TIERS.filter((_, t) => S.sim.upgrades[`biz:${id}:${t}`]).length;
 export const nextMilestone = id => BIZ_MILESTONES.find(m => bizCount(id) < m);
 
 export function idleMult() {
   const m = mods();
   let x = (1 + m.idle / 100) * (1 + m.ach / 100) * (1 + aceLvl('passive') * 0.25);
-  for (const b of S.buffs) if (b.kind === 'frenzy' && b.until > Date.now()) x *= b.value;
+  for (const b of S.buffs) if (['frenzy', 'outage', 'rush'].includes(b.kind) && b.until > Date.now()) x *= b.value;
   return x;
 }
 export function bizIncome(b) { return b.income * bizCount(b.id) * bizMilestoneMult(b.id); }
-export function incomePerSec() {
-  return BUSINESSES.reduce((a, b) => a + bizIncome(b), 0) * idleMult();
+
+// ── Casino sim ───────────────────────────────────────────────────────────────
+export const staffCount = id => S.sim.staff[id] || 0;
+export const totalStaff = () => Object.values(S.sim.staff).reduce((a, b) => a + b, 0);
+export const upgSum = kind => ownedUpgrades().filter(u => u.kind === kind).reduce((a, u) => a + u.value, 0);
+export const guards = () => staffCount('security') + upgSum('security');
+
+export function allUpgrades() {
+  const gen = [];
+  for (const b of BUSINESSES) BIZ_UPGRADE_TIERS.forEach((t, i) => gen.push({
+    id: `biz:${b.id}:${i}`, name: `${b.name}: ${t.label}`, icon: b.icon, cost: b.cost * t.costMult,
+    kind: 'biz', biz: b.id, need: t.need, tier: i, desc: `${b.name} income ×2. Needs ${t.need} owned.`,
+  }));
+  return [...UPGRADES, ...gen];
 }
+export function ownedUpgrades() { return allUpgrades().filter(u => S.sim.upgrades[u.id]); }
+export const upgradeAvailable = u => u.kind !== 'biz' || bizCount(u.biz) >= u.need;
+export function buyUpgrade(u) {
+  if (S.sim.upgrades[u.id] || !upgradeAvailable(u) || S.chips < u.cost) return false;
+  S.chips -= u.cost; S.sim.upgrades[u.id] = Date.now();
+  return true;
+}
+
+export const repTarget = () => {
+  const c = staffCount('cleaner');
+  const t = 45 + (4 * c - 0.15 * c * c) + staffCount('bartender') * 2 + staffCount('singer') * 3 + upgSum('rep')
+    - (S.sim.edge - EDGE_DEFAULT) * 6;
+  return clamp(t, 0, 100);
+};
+export const repMult = () => 0.5 + S.sim.rep / 100;                       // 0.5 … 1.5
+export const edgeMult = () => 1 + (S.sim.edge - EDGE_DEFAULT) * 0.12;      // 0.52 … 2.2
+export const seats = () => Math.max(1, Object.values(S.biz).reduce((a, b) => a + b, 0));
+export function visitors() {
+  const base = 8 + seats() * 1.2;
+  const boost = 1 + staffCount('promoter') * 0.12 + staffCount('singer') * 0.08 + upgSum('visitors') / 100;
+  return Math.round(base * Math.pow(Math.max(0.01, S.sim.rep) / 50, 1.5) * boost);
+}
+export const occupancy = () => Math.min(1, visitors() / seats());
+export const occMult = () => 0.4 + 0.6 * occupancy();
+export const staffMult = () => 1 + staffCount('dealer') * 0.04 + staffCount('bartender') * 0.03;
+export const salaryRate = () => STAFF.reduce((a, st) => a + staffCount(st.id) * st.salary, 0) / 100 * (1 - upgSum('salary') / 100);
+
+export function grossIncome() {
+  return BUSINESSES.reduce((a, b) => a + bizIncome(b), 0) * idleMult()
+    * (1 + upgSum('income') / 100) * staffMult() * repMult() * edgeMult() * occMult();
+}
+export const salaries = () => grossIncome() * salaryRate();
+export function incomePerSec() { return grossIncome() - salaries(); }
+
+export const hireCost = st => Math.floor(Math.max(st.hire * grossIncome(), 150) * 1.2 ** staffCount(st.id));
+export function hire(st) {
+  const c = hireCost(st);
+  if (staffCount(st.id) >= st.max || S.chips < c) return false;
+  S.chips -= c; S.sim.staff[st.id] = staffCount(st.id) + 1;
+  return true;
+}
+export function fire(st) {
+  if (!staffCount(st.id)) return false;
+  S.sim.staff[st.id]--; return true;
+}
+export function addRep(d) { S.sim.rep = clamp(S.sim.rep + d, 0, 100); }
+export function simLog(icon, text) {
+  (S.sim.log ||= []).unshift({ icon, text, at: Date.now() });
+  S.sim.log.length = Math.min(S.sim.log.length, 8);
+  S.sim.incidents = (S.sim.incidents || 0) + 1;
+}
+export function setEdge(v) { S.sim.edge = clamp(Math.round(v), EDGE_MIN, EDGE_MAX); }
+export function tickSim(dt) {
+  const t = repTarget(), r = S.sim.rep;
+  const step = 0.25 * dt;                          // reputation drifts ~1 point every 4s
+  S.sim.rep = r < t ? Math.min(t, r + step) : Math.max(t, r - step);
+}
+export const tableMult = () => ownedUpgrades().filter(u => u.kind === 'tablelimit').reduce((a, u) => a * u.value, 1);
+export const tableLimit = () => VENUES[S.venue].maxBet * tableMult();
 
 export function buyBiz(b, n = 1) {
   const cost = bizCost(b, n);
@@ -210,11 +294,11 @@ export function earn(amount) {
   S.allTimeEarned += amount;
 }
 
-export const maxBet = () => Math.min(VENUES[S.venue].maxBet, Math.max(0, Math.floor(S.chips)));
+export const maxBet = () => Math.min(tableLimit(), Math.max(0, Math.floor(S.chips)));
 export const minBet = () => 1;
 
 export function canBet(amount) {
-  return amount >= minBet() && amount <= S.chips && amount <= VENUES[S.venue].maxBet;
+  return amount >= minBet() && amount <= S.chips && amount <= tableLimit();
 }
 
 // Take the stake. Returns false if not allowed.
@@ -312,7 +396,7 @@ export function pruneBuffs() { S.buffs = S.buffs.filter(b => b.until > Date.now(
 
 // ── Loan shark ───────────────────────────────────────────────────────────────
 export const LOAN_TERM_MIN = 20;
-export const loanLimit = () => Math.max(500, incomePerSec() * 600, S.runEarned * 0.05, VENUES[S.venue].maxBet * 2);
+export const loanLimit = () => Math.max(500, incomePerSec() * 600, S.runEarned * 0.05, tableLimit() * 2);
 export const loanRatePerMin = () => 0.02 * (1 - Math.min(0.8, mods().loan / 100));
 
 export function borrow(amount) {
@@ -367,4 +451,4 @@ export function checkAchievements() {
   return fresh;
 }
 
-export { BUSINESSES, VENUES, GAMES, CHARMS, ACE_SHOP, ACHIEVEMENTS };
+export { BUSINESSES, VENUES, GAMES, CHARMS, ACE_SHOP, ACHIEVEMENTS, STAFF, EDGE_MIN, EDGE_MAX };

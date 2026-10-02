@@ -1,8 +1,10 @@
 import * as C from './core.js';
 import {
   VENUES, GAMES, BUSINESSES, CHARMS, RARITIES, CHARM_MAX_LEVEL, ACE_SHOP, ACHIEVEMENTS, WHEEL, GOLDEN, BROKE_LINES, BIZ_MILESTONES, LUCK_CAP,
+  STAFF, INCIDENTS,
 } from './data.js';
 import { GAME_UI, initGames } from './games.js';
+import * as INC from './incidents.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -112,6 +114,13 @@ function refresh() {
     debt.classList.toggle('urgent', !S.loan.garnish && left < 180);
   }
   const buffs = S.buffs.filter(b => b.until > Date.now());
+  const alert = $('#alert'), pend = S.sim.pending;
+  alert.hidden = !pend;
+  if (pend) {
+    const d = INC.incidentDef(pend.id);
+    if (alert.dataset.id !== pend.id + pend.at) { alert.dataset.id = pend.id + pend.at; alert.innerHTML = `${d.icon} <span>${esc(d.title)}</span> <small></small>`; }
+    alert.querySelector('small').textContent = Math.max(0, Math.ceil(INC.autoResolveIn())) + 's';
+  }
   $('#buffs').innerHTML = buffs.map(b => `<span class="buff">${b.label} · ${Math.ceil((b.until - Date.now()) / 1000)}s</span>`).join('');
   const wheelReady = Date.now() - S.lastWheel >= 864e5;
   document.querySelector('[data-tab="wheel"]')?.classList.toggle('ping', wheelReady);
@@ -124,13 +133,14 @@ function refresh() {
 //  TABS
 // ═════════════════════════════════════════════════════════════════════════════
 const TABS = [
-  ['floor', '🎰', 'Casino Floor'], ['casino', '🏢', 'Your Casino'], ['crates', '🎁', 'Crates & Charms'],
+  ['floor', '🎰', 'Casino Floor'], ['casino', '🏢', 'Your Casino'], ['upgrades', '⬆️', 'Upgrades'], ['crates', '🎁', 'Crates & Charms'],
   ['venues', '🗺️', 'Venues'], ['vinnie', '🦈', 'Vinnie'], ['wheel', '🎡', 'Daily Wheel'],
   ['prestige', '🂡', 'Fold'], ['ach', '🏆', 'Achievements'], ['stats', '📊', 'Stats'], ['settings', '⚙️', 'Settings'],
 ];
 let tab = 'floor', currentGame = null, activeGame = null;
 
 function setTab(t) {
+  clearInterval(floorTimer);
   if (activeGame) { GAME_UI[activeGame]?.destroy?.(); activeGame = null; }
   tab = t;
   $('#nav').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
@@ -164,7 +174,7 @@ PANELS.floor = () => {
     <div class="game-head">
       <div><h2>${C.gameDef(currentGame).icon} ${C.gameDef(currentGame).name}</h2><p class="muted">${esc(C.gameDef(currentGame).desc)}</p></div>
       <div class="game-meta">
-        <span>Table limit <b>${M(VENUES[C.S.venue].maxBet)}</b></span>
+        <span>Table limit <b>${M(C.tableLimit())}</b></span>
         <span>Winnings <b>×${C.profitMult(currentGame).toFixed(2)}</b></span>
         <span>Luck <b>${(C.luck() * 100).toFixed(1)}%</b></span>
       </div>
@@ -202,14 +212,55 @@ function beg() {
   refresh();
 }
 
-// ── Your casino (idle businesses) ────────────────────────────────────────────
-let buyMode = 1;
+// ── Your casino (sim) ────────────────────────────────────────────────────────
+let buyMode = 1, casinoView = 'floor';
+const stars = r => { const n = r / 20; return '★★★★★'.split('').map((c, i) => `<i class="${i < Math.round(n) ? 'on' : ''}">★</i>`).join(''); };
+const pct = x => (x >= 1 ? '+' : '') + Math.round((x - 1) * 100) + '%';
+
 PANELS.casino = () => `
   <div class="panel-head">
-    <div><h2>🏢 Your Casino</h2><p class="muted">Every machine is rigged in your favour. They earn while you play — and while you're away.</p></div>
-    <div class="buymode">${[1, 10, 25, 'max'].map(m => `<button data-m="${m}" class="${String(buyMode) === String(m) ? 'on' : ''}">${m === 'max' ? 'Max' : '×' + m}</button>`).join('')}</div>
+    <div><h2>🏢 Your Casino</h2><p class="muted">Run the place. Rig the games, hire staff, keep the customers happy — and keep an eye on the floor.</p></div>
+    <div class="buymode subtabs">${[['floor', '🎲 Floor'], ['biz', '🏗️ Businesses'], ['staff', '👥 Staff']].map(([k, l]) => `<button data-v="${k}" class="${casinoView === k ? 'on' : ''}">${l}</button>`).join('')}</div>
   </div>
-  <div class="income-banner">Earning <b id="cas-ips">${M(C.incomePerSec())}/s</b> <span class="muted">· income bonus ×${C.idleMult().toFixed(2)}</span></div>
+  <div class="income-banner">
+    <span>Net <b id="cas-ips">${M(C.incomePerSec())}/s</b></span>
+    <span class="muted">Gross <span id="cas-gross">${M(C.grossIncome())}/s</span> · Salaries <span id="cas-sal">−${M(C.salaries())}/s</span></span>
+  </div>
+  ${casinoView === 'floor' ? floorView() : casinoView === 'biz' ? bizView() : staffView()}`;
+
+function floorView() {
+  const S = C.S;
+  return `
+  <div class="sim-grid">
+    <div class="sim-cards">
+      <div class="sim-card"><div class="sc-label">Reputation</div><div class="stars" id="rep-stars">${stars(S.sim.rep)}</div>
+        <div class="sc-val"><b id="rep-val">${S.sim.rep.toFixed(0)}</b>/100 <span class="muted small" id="rep-trend"></span></div>
+        <div class="muted small">More reputation → more visitors and income.</div></div>
+      <div class="sim-card"><div class="sc-label">Visitors</div><div class="sc-val"><b id="vis-val">${C.visitors()}</b> on the floor · <span id="seat-val">${C.seats()}</span> seats</div>
+        <div class="bar"><i id="occ-bar" style="width:${C.occupancy() * 100}%"></i></div>
+        <div class="muted small">Empty seats earn less. Add promoters, singers and signs.</div></div>
+      <div class="sim-card edge-card"><div class="sc-label">House edge — how rigged are your games?</div>
+        <div class="edge-row"><input type="range" id="edge" min="${C.EDGE_MIN}" max="${C.EDGE_MAX}" step="1" value="${S.sim.edge}" /><b id="edge-val">${S.sim.edge}%</b></div>
+        <div class="muted small" id="edge-note"></div></div>
+      <div class="sim-card"><div class="sc-label">Multipliers</div><div class="mults" id="mults"></div></div>
+    </div>
+    <div class="floor-wrap">
+      <div class="floor" id="floor">
+        ${BUSINESSES.filter(b => C.bizCount(b.id)).map(b => `<div class="ftile" data-b="${b.id}" title="${esc(b.name)}"><span>${b.icon}</span><small>×${C.bizCount(b.id)}</small></div>`).join('') || '<div class="floor-empty">Your floor is empty. Buy your first business!</div>'}
+        <div class="people" id="people"></div>
+      </div>
+      <div class="inc-log"><div class="sc-label">Incident log</div><div id="inc-log">${incidentLogHtml()}</div></div>
+    </div>
+  </div>`;
+}
+function incidentLogHtml() {
+  const log = C.S.sim.log || [];
+  return log.length ? log.map(l => `<div class="inc-row"><span>${l.icon}</span><span>${esc(l.text)}</span></div>`).join('') : '<div class="muted small">Quiet so far. It won\'t last.</div>';
+}
+
+function bizView() {
+  return `
+  <div class="row-end"><div class="buymode">${[1, 10, 25, 'max'].map(m => `<button data-m="${m}" class="${String(buyMode) === String(m) ? 'on' : ''}">${m === 'max' ? 'Max' : '×' + m}</button>`).join('')}</div></div>
   <div class="biz-list">
     ${BUSINESSES.map((b, i) => {
       const hidden = i > 0 && C.bizCount(BUSINESSES[i - 1].id) === 0 && C.bizCount(b.id) === 0;
@@ -224,7 +275,31 @@ PANELS.casino = () => `
       </div>`;
     }).join('')}
   </div>`;
+}
+
+function staffView() {
+  return `
+  <div class="staff-list">
+    ${STAFF.map(st => `<div class="staff" data-st="${st.id}">
+      <div class="st-icon">${st.icon}</div>
+      <div class="st-info"><div class="biz-name">${esc(st.name)} <span class="biz-owned" data-n>${C.staffCount(st.id)}/${st.max}</span></div>
+        <div class="muted small">${esc(st.desc)}</div>
+        <div class="muted small">Salary ${st.salary}% of gross income each.</div></div>
+      <div class="st-btns"><button class="btn-ghost" data-fire>Fire</button><button class="biz-buy" data-hire></button></div>
+    </div>`).join('')}
+  </div>
+  <p class="muted small">Staff stay until you Fold. Security also helps against robberies and cheats; cleaners keep inspectors happy.</p>`;
+}
+
 MOUNT.casino = main => {
+  main.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => { casinoView = b.dataset.v; sfx('tick'); render(); }));
+  const common = () => {
+    $('#cas-ips').textContent = M(C.incomePerSec()) + '/s';
+    $('#cas-gross').textContent = M(C.grossIncome()) + '/s';
+    $('#cas-sal').textContent = '−' + M(C.salaries()) + '/s';
+  };
+  if (casinoView === 'floor') return mountFloor(main, common);
+  if (casinoView === 'staff') return mountStaff(main, common);
   main.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => { buyMode = b.dataset.m === 'max' ? 'max' : +b.dataset.m; render(); }));
   main.querySelectorAll('.biz').forEach(row => {
     const b = BUSINESSES.find(x => x.id === row.dataset.b);
@@ -235,7 +310,7 @@ MOUNT.casino = main => {
     });
   });
   liveUpdate = () => {
-    $('#cas-ips').textContent = M(C.incomePerSec()) + '/s';
+    common();
     main.querySelectorAll('.biz').forEach(row => {
       if (row.classList.contains('mystery')) return;
       const b = BUSINESSES.find(x => x.id === row.dataset.b);
@@ -246,12 +321,126 @@ MOUNT.casino = main => {
       btn.disabled = cost > C.S.chips;
       row.querySelector('[data-owned]').textContent = C.bizCount(b.id);
       const next = C.nextMilestone(b.id);
-      row.querySelector('[data-sub]').innerHTML = `${M(C.bizIncome(b) * C.idleMult())}/s total · ${M(b.income * C.bizMilestoneMult(b.id) * C.idleMult())}/s each` +
+      const each = b.income * C.bizMilestoneMult(b.id) * C.idleMult();
+      row.querySelector('[data-sub]').innerHTML = `${M(each * C.bizCount(b.id))}/s base · ${M(each)}/s each` +
         (next ? ` · <span class="ms-txt">×2 at ${next}</span>` : ' · <span class="ms-txt">all milestones</span>');
       const prev = [...BIZ_MILESTONES].reverse().find(m => m <= C.bizCount(b.id)) || 0;
       row.querySelector('[data-ms]').style.width = next ? ((C.bizCount(b.id) - prev) / (next - prev) * 100) + '%' : '100%';
     });
   };
+};
+
+function mountStaff(main, common) {
+  main.querySelectorAll('.staff').forEach(row => {
+    const st = STAFF.find(x => x.id === row.dataset.st);
+    row.querySelector('[data-hire]').addEventListener('click', () => {
+      if (C.hire(st)) { sfx('buy'); toast(`${st.icon} Hired a ${st.name.toLowerCase()}.`); refresh(); } else sfx('nope');
+    });
+    row.querySelector('[data-fire]').addEventListener('click', () => { if (C.fire(st)) { sfx('tick'); refresh(); } });
+  });
+  liveUpdate = () => {
+    common();
+    main.querySelectorAll('.staff').forEach(row => {
+      const st = STAFF.find(x => x.id === row.dataset.st), n = C.staffCount(st.id), full = n >= st.max, cost = C.hireCost(st);
+      row.querySelector('[data-n]').textContent = `${n}/${st.max}`;
+      const h = row.querySelector('[data-hire]');
+      h.innerHTML = full ? 'Full team' : `Hire<br><b>${M(cost)}</b>`;
+      h.disabled = full || cost > C.S.chips;
+      row.querySelector('[data-fire]').disabled = !n;
+    });
+  };
+}
+
+let floorTimer = 0;
+function mountFloor(main, common) {
+  const edge = $('#edge');
+  const note = () => {
+    const S = C.S, e = S.sim.edge;
+    $('#edge-val').textContent = e + '%';
+    $('#edge-note').innerHTML = `Income ×${C.edgeMult().toFixed(2)} · reputation target <b>${C.repTarget().toFixed(0)}</b>` +
+      (e > 8 ? ' · <span class="r">customers are noticing…</span>' : e < 4 ? ' · <span class="g">customers love the odds</span>' : '');
+  };
+  edge.addEventListener('input', () => { C.setEdge(+edge.value); note(); refresh(); });
+  note();
+  // little people wandering around the floor
+  const people = $('#people');
+  const FACES = ['🧍', '🧍‍♀️', '🧍‍♂️', '🕴️', '💃', '🧑‍🦳', '👩‍🦰', '🤠', '🧔', '👵'];
+  const sync = () => {
+    const want = Math.min(36, C.visitors());
+    while (people.children.length < want) {
+      const p = document.createElement('span'); p.className = 'person';
+      p.textContent = FACES[Math.floor(Math.random() * FACES.length)];
+      p.style.left = Math.random() * 92 + '%'; p.style.top = Math.random() * 85 + '%';
+      people.appendChild(p);
+    }
+    while (people.children.length > want) people.lastChild.remove();
+    people.querySelectorAll('.person').forEach(p => {
+      if (Math.random() < 0.6) { p.style.left = Math.random() * 92 + '%'; p.style.top = Math.random() * 85 + '%'; }
+    });
+    const tiles = main.querySelectorAll('.ftile');
+    if (tiles.length && C.S.settings.motion) {
+      const t = tiles[Math.floor(Math.random() * tiles.length)];
+      const pop = document.createElement('i'); pop.className = 'coinpop'; pop.textContent = '+$';
+      t.appendChild(pop); setTimeout(() => pop.remove(), 1200);
+    }
+  };
+  sync();
+  clearInterval(floorTimer);
+  floorTimer = setInterval(() => { if (!document.body.contains(people)) return clearInterval(floorTimer); sync(); }, 2200);
+  liveUpdate = () => {
+    common();
+    const S = C.S, t = C.repTarget();
+    $('#rep-stars').innerHTML = stars(S.sim.rep);
+    $('#rep-val').textContent = S.sim.rep.toFixed(0);
+    $('#rep-trend').textContent = Math.abs(t - S.sim.rep) < 0.5 ? '· steady' : t > S.sim.rep ? `· rising to ${t.toFixed(0)}` : `· falling to ${t.toFixed(0)}`;
+    $('#rep-trend').className = 'small ' + (t > S.sim.rep + 0.5 ? 'g' : t < S.sim.rep - 0.5 ? 'r' : 'muted');
+    $('#vis-val').textContent = C.visitors();
+    $('#seat-val').textContent = C.seats();
+    $('#occ-bar').style.width = C.occupancy() * 100 + '%';
+    $('#mults').innerHTML = [
+      ['Reputation', C.repMult()], ['House edge', C.edgeMult()], ['Occupancy', C.occMult()], ['Staff', C.staffMult()],
+      ['Upgrades', 1 + C.upgSum('income') / 100], ['Charms, aces & achievements', C.idleMult()],
+    ].map(([k, v]) => `<div><span class="muted">${k}</span><b class="${v >= 1 ? 'g' : 'r'}">${pct(v)}</b></div>`).join('');
+    note();
+  };
+}
+
+// ── Upgrades ─────────────────────────────────────────────────────────────────
+let upFilter = 'all';
+const UP_GROUPS = { casino: ['income', 'rep', 'visitors', 'security', 'salary', 'offline'], you: ['luck', 'tablelimit'] };
+const upGroup = u => u.kind === 'biz' ? 'biz' : u.kind.startsWith('profit:') || UP_GROUPS.you.includes(u.kind) ? 'you' : 'casino';
+PANELS.upgrades = () => {
+  const all = C.allUpgrades().filter(u => u.kind !== 'biz' || C.bizCount(u.biz) > 0);
+  const list = all.filter(u => (upFilter === 'all' || upGroup(u) === upFilter));
+  const open = list.filter(u => !C.S.sim.upgrades[u.id]).sort((a, b) => a.cost - b.cost);
+  const owned = list.filter(u => C.S.sim.upgrades[u.id]);
+  const card = u => {
+    const has = C.S.sim.upgrades[u.id], ok = C.upgradeAvailable(u);
+    return `<div class="upg ${has ? 'owned' : ''} ${ok ? '' : 'locked'}" data-u="${u.id}">
+      <div class="upg-icon">${u.icon}</div>
+      <div class="upg-info"><b>${esc(u.name)}</b><div class="muted small">${esc(u.desc)}</div></div>
+      ${has ? '<span class="v-tag">Owned</span>' : `<button class="biz-buy" data-buyup="${u.id}" ${ok ? '' : 'disabled'}>${ok ? `Buy<br><b>${M(u.cost)}</b>` : `Need ${u.need}`}</button>`}
+    </div>`;
+  };
+  return `
+  <div class="panel-head">
+    <div><h2>⬆️ Upgrades</h2><p class="muted">One-time purchases. They last until you Fold.</p></div>
+    <div class="buymode subtabs">${[['all', 'All'], ['casino', '🏢 Casino'], ['biz', '🏗️ Businesses'], ['you', '🎰 You']].map(([k, l]) => `<button data-f="${k}" class="${upFilter === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+  </div>
+  <div class="upg-list">${open.map(card).join('') || '<p class="muted">Nothing left to buy here — for now.</p>'}</div>
+  ${owned.length ? `<h3 class="sub">Owned <span class="muted">${owned.length}</span></h3><div class="upg-list">${owned.map(card).join('')}</div>` : ''}`;
+};
+MOUNT.upgrades = main => {
+  main.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => { upFilter = b.dataset.f; sfx('tick'); render(); }));
+  main.querySelectorAll('[data-buyup]').forEach(b => b.addEventListener('click', () => {
+    const u = C.allUpgrades().find(x => x.id === b.dataset.buyup);
+    if (C.buyUpgrade(u)) { sfx('level'); toast(`${u.icon} <b>${esc(u.name)}</b> installed.`, 'big'); achievements(); refresh(); render(); }
+    else sfx('nope');
+  }));
+  liveUpdate = () => main.querySelectorAll('[data-buyup]').forEach(b => {
+    const u = C.allUpgrades().find(x => x.id === b.dataset.buyup);
+    b.disabled = !C.upgradeAvailable(u) || u.cost > C.S.chips;
+  });
 };
 
 // ── Crates & charms ──────────────────────────────────────────────────────────
@@ -568,8 +757,9 @@ function modal(html, closable = true) {
   $('#modal-body').innerHTML = html;
   $('#modal').hidden = false;
   $('#modal').dataset.closable = closable ? '1' : '';
+  delete $('#modal').dataset.inc;
 }
-function closeModal() { $('#modal').hidden = true; }
+function closeModal() { $('#modal').hidden = true; delete $('#modal').dataset.inc; }
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal' && $('#modal').dataset.closable) closeModal(); });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -614,18 +804,53 @@ function loop(now) {
   }
   // interest
   if (S.loan.debt > 0) S.loan.debt *= (1 + C.loanRatePerMin()) ** (dt / 60);
+  C.tickSim(dt);
   S.stats.played += dt;
   secTimer += dt; saveTimer += dt;
   if (secTimer >= 0.25) {
     secTimer = 0;
     if (S.loan.debt > 0 && !S.loan.garnish && Date.now() > S.loan.deadline) collect();
     C.pruneBuffs();
+    incidents();
     if (Date.now() > nextGolden && !document.hidden) { spawnGolden(); nextGolden = Date.now() + 90e3 + Math.random() * 180e3; }
     achievements();
     refresh();
   }
   if (saveTimer >= 5) { saveTimer = 0; C.save(); }
   requestAnimationFrame(loop);
+}
+
+// ── Incidents ────────────────────────────────────────────────────────────────
+function incidents() {
+  const def = INC.maybeSpawn();
+  if (def) { sfx(def.id === 'robbery' ? 'boom' : 'cash'); toast(`${def.icon} <b>${esc(def.title)}</b> — click the alert up top to decide.`, 'bad'); }
+  if (C.S.sim.pending && INC.autoResolveIn() <= 0) {
+    if (!$('#modal').hidden && $('#modal').dataset.inc) closeModal();
+    finishIncident(-1, true);
+  }
+}
+function openIncident() {
+  const p = C.S.sim.pending;
+  if (!p) return;
+  const d = INC.incidentDef(p.id);
+  modal(`<div class="inc-modal"><div class="inc-icon">${d.icon}</div><h2>${esc(d.title)}</h2>
+    <p>${esc(d.text)}</p>
+    <div class="inc-choices">${INC.CHOICES[p.id].map((c, i) => {
+      const ok = !c.ok || c.ok();
+      return `<button class="inc-choice" data-ch="${i}" ${ok ? '' : 'disabled'}><b>${esc(c.label)}</b><small>${esc(c.hint())}</small></button>`;
+    }).join('')}</div>
+    <p class="muted small">If you don't decide in ${Math.ceil(INC.autoResolveIn())}s, your manager picks the safe option.</p></div>`);
+  $('#modal').dataset.inc = '1';
+  $('#modal-body').querySelectorAll('[data-ch]').forEach(b => b.addEventListener('click', () => { closeModal(); finishIncident(+b.dataset.ch); }));
+}
+function finishIncident(i, auto = false) {
+  const r = INC.resolve(i);
+  if (!r) return;
+  const good = r.good;
+  sfx(good ? 'win' : 'lose');
+  toast(`${r.def.icon} ${auto ? '<i>Manager decided:</i> ' : ''}${esc(r.text)}`, good ? 'big' : 'bad');
+  const log = $('#inc-log'); if (log) log.innerHTML = incidentLogHtml();
+  achievements(); refresh();
 }
 
 function collect() {
@@ -651,6 +876,7 @@ initGames({ afterBet, toast, sfx, refresh });
 document.body.classList.toggle('still', !C.S.settings.motion);
 
 $('#nav').innerHTML = TABS.map(([id, icon, label]) => `<button data-tab="${id}"><span class="ni">${icon}</span><span class="nl">${label}</span></button>`).join('');
+$('#alert').addEventListener('click', () => { sfx('tick'); openIncident(); });
 $('#nav').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) { sfx('tick'); setTab(b.dataset.tab); } });
 
 // offline earnings

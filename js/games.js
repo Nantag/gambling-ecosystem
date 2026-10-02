@@ -36,9 +36,9 @@ function bindBet(root, game) {
   const upd = () => {
     const v = readRaw();
     hint.textContent = !isFinite(v) || v < 1 ? 'Enter a bet (e.g. 250, 1.5k, 2m)'
-      : v > C.VENUES[C.S.venue].maxBet ? `Table limit here is ${C.money(C.VENUES[C.S.venue].maxBet)}`
+      : v > C.tableLimit() ? `Table limit here is ${C.money(C.tableLimit())}`
       : v > C.S.chips ? 'Not enough chips' : `Your wins are boosted ×${C.profitMult(game).toFixed(2)}`;
-    hint.classList.toggle('bad', !(v >= 1 && v <= C.S.chips && v <= C.VENUES[C.S.venue].maxBet));
+    hint.classList.toggle('bad', !(v >= 1 && v <= C.S.chips && v <= C.tableLimit()));
   };
   const readRaw = () => Math.floor(C.parseAmount(input.value));
   root.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => {
@@ -55,7 +55,7 @@ function bindBet(root, game) {
     take() {
       const v = readRaw();
       if (!C.stake(game, v)) {
-        ui.toast(v > C.S.chips ? 'Not enough chips.' : v > C.VENUES[C.S.venue].maxBet ? 'Over the table limit.' : 'Invalid bet.', 'bad');
+        ui.toast(v > C.S.chips ? 'Not enough chips.' : v > C.tableLimit() ? 'Over the table limit.' : 'Invalid bet.', 'bad');
         ui.sfx('nope');
         return 0;
       }

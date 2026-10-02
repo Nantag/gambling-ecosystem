@@ -11,13 +11,13 @@ export const VENUES = [
     blurb: 'Sticky carpet, flashing lights, slot machines that hum your name.' },
   { id: 'river',    name: 'Riverboat',       icon: '🛶', cost: 75e3,   maxBet: 50e3,     mult: 1.5, crate: 90e3,
     blurb: 'A paddle steamer that never seems to dock. Roulette and rockets.' },
-  { id: 'vegas',    name: 'Vegas Strip',     icon: '🌃', cost: 3e6,    maxBet: 2e6,      mult: 2,   crate: 3e6,
+  { id: 'vegas',    name: 'Vegas Strip',     icon: '🌃', cost: 5e6,    maxBet: 2e6,      mult: 2,   crate: 3e6,
     blurb: 'Free drinks, no clocks, no windows. The real tables.' },
-  { id: 'monaco',   name: 'Monte Carlo',     icon: '🛥️', cost: 4e8,    maxBet: 2.5e8,    mult: 3,   crate: 3e8,
+  { id: 'monaco',   name: 'Monte Carlo',     icon: '🛥️', cost: 3e9,    maxBet: 2.5e8,    mult: 3,   crate: 3e8,
     blurb: 'Yachts, tuxedos, and a croupier who has seen empires fall.' },
-  { id: 'orbit',    name: 'Orbital Casino',  icon: '🛰️', cost: 8e10,   maxBet: 5e10,     mult: 5,   crate: 6e10,
+  { id: 'orbit',    name: 'Orbital Casino',  icon: '🛰️', cost: 2e12,   maxBet: 5e10,     mult: 5,   crate: 6e10,
     blurb: 'Zero gravity craps. The dice never land, so the house never loses.' },
-  { id: 'void',     name: 'The Void',        icon: '🕳️', cost: 5e13,   maxBet: Infinity, mult: 10,  crate: 3e13,
+  { id: 'void',     name: 'The Void',        icon: '🕳️', cost: 1e16,   maxBet: Infinity, mult: 10,  crate: 3e13,
     blurb: 'There is no table. There is no dealer. There is only the bet.' },
 ];
 
@@ -124,6 +124,11 @@ export const ACHIEVEMENTS = [
   { id: 'hundred',   name: 'Regular',            desc: 'Place 100 bets.',                     check: s => s.stats.bets >= 100 },
   { id: 'thousand',  name: 'Problem? What Problem', desc: 'Place 1,000 bets.',                check: s => s.stats.bets >= 1000 },
   { id: 'tenk',      name: 'Furniture',          desc: 'Place 10,000 bets.',                  check: s => s.stats.bets >= 1e4 },
+  { id: 'boss',      name: 'The Boss',           desc: 'Employ 10 staff at once.',            check: s => Object.values(s.sim.staff).reduce((a, b) => a + b, 0) >= 10 },
+  { id: 'payroll',   name: 'Payroll Department', desc: 'Employ 40 staff at once.',            check: s => Object.values(s.sim.staff).reduce((a, b) => a + b, 0) >= 40 },
+  { id: 'renovator', name: 'Renovator',          desc: 'Own 10 upgrades.',                    check: s => Object.keys(s.sim.upgrades).length >= 10 },
+  { id: 'fivestar',  name: 'Five Stars',         desc: 'Reach 90 reputation.',                check: s => s.sim.rep >= 90 },
+  { id: 'crisis',    name: 'Crisis Manager',     desc: 'Handle 25 incidents.',                check: s => (s.sim.incidents || 0) >= 25 },
   { id: 'win10x',    name: 'Ten Bagger',         desc: 'Win 10× your bet in one go.',         check: s => s.stats.bestMult >= 10 },
   { id: 'win100x',   name: 'Hundred Bagger',     desc: 'Win 100× your bet in one go.',        check: s => s.stats.bestMult >= 100 },
   { id: 'streak5',   name: 'On Fire',            desc: 'Win 5 bets in a row.',                check: s => s.stats.bestStreak >= 5 },
@@ -176,4 +181,75 @@ export const BROKE_LINES = [
   'Sal lends you a few bucks "for the bus".',
   'You return some bottles for the deposit.',
   'A pigeon brings you a coin. Weird, but okay.',
+];
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  CASINO SIM — staff, upgrades, incidents
+// ═════════════════════════════════════════════════════════════════════════════
+
+// House edge dial: how hard your machines are rigged (percent)
+export const EDGE_MIN = 1, EDGE_MAX = 15, EDGE_DEFAULT = 5;
+
+// Staff: hire fee = `hire` seconds of gross income; salary = `salary` % of gross income each
+export const STAFF = [
+  { id: 'dealer',   name: 'Dealer',          icon: '🧑‍💼', max: 20, hire: 30,  salary: 0.6, desc: '+4% casino income each.' },
+  { id: 'cleaner',  name: 'Cleaner',         icon: '🧹', max: 10, hire: 20,  salary: 0.5,   desc: '+4 reputation target each (diminishing). Inspectors love them.' },
+  { id: 'security', name: 'Security Guard',  icon: '🛡️', max: 8,  hire: 40,  salary: 0.8, desc: 'Stops robberies and cheats. Each guard is −12% loss and +12% catch chance.' },
+  { id: 'bartender',name: 'Bartender',       icon: '🍸', max: 10, hire: 25,  salary: 0.5,   desc: '+3% income and +2 reputation target each.' },
+  { id: 'singer',   name: 'Lounge Singer',   icon: '🎤', max: 6,  hire: 60,  salary: 1,   desc: '+3 reputation target and +8% visitors each. Celebrities notice.' },
+  { id: 'promoter', name: 'Promoter',        icon: '📣', max: 8,  hire: 50,  salary: 1,   desc: '+12% visitors each. More visitors, more whales.' },
+];
+
+// One-time upgrades.
+//   kind: biz (×2 to one business) · income (+% casino income) · rep (+ reputation target)
+//         visitors (+%) · security (+guards equivalent) · luck · profit:<game|all> · tablelimit (×) · offline (+h) · salary (−%)
+export const UPGRADES = [
+  // casino-wide
+  { id: 'carpet',    name: 'Dizzying Carpet',         icon: '🌀', cost: 2500,   kind: 'income',  value: 15, desc: 'Nobody can find the exit. +15% casino income.' },
+  { id: 'noclocks',  name: 'No Clocks Policy',        icon: '🕰️', cost: 4e4,    kind: 'income',  value: 20, desc: 'Time stops being real. +20% casino income.' },
+  { id: 'oxygen',    name: 'Extra Oxygen Vents',      icon: '💨', cost: 6e5,    kind: 'income',  value: 25, desc: 'Everyone feels great. +25% casino income.' },
+  { id: 'freedrinks',name: 'Free Drinks',             icon: '🍹', cost: 8000,   kind: 'rep',     value: 8,  desc: '+8 reputation target.' },
+  { id: 'buffet',    name: 'All-You-Can-Eat Buffet',  icon: '🍤', cost: 2e5,    kind: 'rep',     value: 10, desc: '+10 reputation target.' },
+  { id: 'fountain',  name: 'Dancing Fountains',       icon: '⛲', cost: 5e7,    kind: 'rep',     value: 12, desc: '+12 reputation target.' },
+  { id: 'sign',      name: 'Giant Neon Sign',         icon: '🪧', cost: 1.5e4,  kind: 'visitors',value: 25, desc: '+25% visitors.' },
+  { id: 'billboard', name: 'Highway Billboards',      icon: '🛣️', cost: 3e6,    kind: 'visitors',value: 40, desc: '+40% visitors.' },
+  { id: 'cameras',   name: 'Eye in the Sky',          icon: '📹', cost: 5e4,    kind: 'security',value: 2,  desc: 'Cameras everywhere. Counts as 2 extra guards.' },
+  { id: 'vault',     name: 'Time-Lock Vault',         icon: '🔐', cost: 2e7,    kind: 'security',value: 3,  desc: 'Counts as 3 extra guards.' },
+  { id: 'union',     name: 'Friendly Union Deal',     icon: '🤝', cost: 1e6,    kind: 'salary',  value: 30, desc: 'Staff salaries −30%.' },
+  { id: 'nightclub', name: 'Rooftop Nightclub',       icon: '🪩', cost: 4e8,    kind: 'income',  value: 50, desc: '+50% casino income.' },
+  { id: 'resort',    name: 'Resort Hotel Tower',      icon: '🏨', cost: 6e10,   kind: 'income',  value: 100, desc: 'Guests never leave. +100% casino income.' },
+  { id: 'sleep2',    name: 'Night Manager',           icon: '🌙', cost: 3e5,    kind: 'offline', value: 2,  desc: '+2h offline earnings cap.' },
+  // you, the gambler
+  { id: 'socks',     name: 'Lucky Socks',             icon: '🧦', cost: 1000,   kind: 'luck',    value: 1,  desc: '+1% luck. Never washed.' },
+  { id: 'horseshoe', name: 'Golden Horseshoe',        icon: '🧲', cost: 5e5,    kind: 'luck',    value: 2,  desc: '+2% luck.' },
+  { id: 'wallet',    name: 'Bigger Wallet',           icon: '👛', cost: 5000,   kind: 'tablelimit', value: 2, desc: 'Table limits ×2.' },
+  { id: 'briefcase', name: 'Briefcase of Cash',       icon: '💼', cost: 5e6,    kind: 'tablelimit', value: 3, desc: 'Table limits ×3.' },
+  { id: 'coinmagnet',name: 'Weighted Coin',           icon: '🪙', cost: 800,    kind: 'profit:coin',     value: 30, desc: 'Coin Flip winnings +30%.' },
+  { id: 'eraser',    name: 'Professional Scratcher',  icon: '🪒', cost: 1500,   kind: 'profit:scratch',  value: 30, desc: 'Scratch Card winnings +30%.' },
+  { id: 'oilcan',    name: 'Oiled Lever',             icon: '🛢️', cost: 2e4,    kind: 'profit:slots',    value: 35, desc: 'Slots winnings +35%.' },
+  { id: 'detector',  name: 'Metal Detector',          icon: '📡', cost: 3e4,    kind: 'profit:mines',    value: 35, desc: 'Mines winnings +35%.' },
+  { id: 'nasa',      name: 'Rocket Science Degree',   icon: '🎓', cost: 4e5,    kind: 'profit:crash',    value: 35, desc: 'Crash winnings +35%.' },
+  { id: 'magnetball',name: 'Magnetic Ball',           icon: '⚾', cost: 6e5,    kind: 'profit:roulette', value: 35, desc: 'Roulette winnings +35%.' },
+  { id: 'counting',  name: 'Card Counting Course',    icon: '🧮', cost: 2e7,    kind: 'profit:blackjack',value: 40, desc: 'Blackjack winnings +40%.' },
+  { id: 'tux',       name: 'High Roller Tuxedo',      icon: '🤵', cost: 1e9,    kind: 'profit:all',      value: 50, desc: 'All winnings +50%.' },
+];
+
+// Per-business upgrades are generated: three tiers each, ×2 income, need N owned
+export const BIZ_UPGRADE_TIERS = [
+  { need: 10, costMult: 500,    label: 'Neon Makeover' },
+  { need: 25, costMult: 1e5,   label: 'VIP Section' },
+  { need: 50, costMult: 1e8, label: 'Golden Edition' },
+];
+
+// Incidents on your casino floor. Each has choices; outcomes are resolved in main.js.
+export const INCIDENTS = [
+  { id: 'whale',     icon: '🐋', title: 'A whale walks in',          weight: 16, text: 'A billionaire in sunglasses wants a private high-stakes table.' },
+  { id: 'counter',   icon: '🧮', title: 'Card counter spotted',      weight: 14, text: 'Your pit boss is sure the guy at table 6 is counting cards.' },
+  { id: 'robbery',   icon: '🔫', title: 'Robbery in progress!',      weight: 9,  text: 'Masked crew heading for the cage. Security is moving.' },
+  { id: 'inspector', icon: '🧑‍⚖️', title: 'Health inspector',          weight: 12, text: 'Clipboard. Gloves. Frown.' },
+  { id: 'celebrity', icon: '🌟', title: 'A celebrity drops by',      weight: 11, text: 'A pop star wants to play roulette — with cameras rolling.' },
+  { id: 'outage',    icon: '💡', title: 'Power outage',              weight: 10, text: 'Half the floor just went dark.' },
+  { id: 'cheat',     icon: '🃏', title: 'Rigged dice',               weight: 10, text: 'Someone swapped in loaded dice at the craps table.' },
+  { id: 'jackpot',   icon: '🎰', title: 'A customer hits a jackpot', weight: 10, text: 'Lights, sirens, a screaming grandmother. She won big — on your machine.' },
+  { id: 'tour',      icon: '🚌', title: 'Tour bus arrives',          weight: 8,  text: 'Forty retirees with coupons and boundless energy.' },
 ];
