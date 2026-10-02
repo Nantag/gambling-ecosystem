@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gambling Ecosystem</title>
+  <meta name="description" content="An idle casino tycoon: gamble fake chips, build a rigged empire, climb from the Back Alley to The Void." />
+  <meta name="theme-color" content="#0b1410" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='32' y='48' font-size='44' text-anchor='middle'%3E%F0%9F%8E%B2%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">🎲</span><span class="brand-name">Gambling<br>Ecosystem</span></div>
+    <div class="money">
+      <div class="chips" id="chips">$100</div>
+      <div class="ips"><span id="ips">$0/s</span> · <span id="venue-name"></span></div>
+    </div>
+    <div class="meta">
+      <div class="level" title="">LV <b id="lvl">1</b><div class="xp"><i id="xpbar"></i></div></div>
+      <div class="aces" id="aces-wrap" hidden>🂡 <b id="aces">0</b></div>
+    </div>
+    <div class="status">
+      <div class="debt" id="debt" hidden></div>
+      <div class="buffs" id="buffs"></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <main class="main" id="main"></main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="modal" id="modal" hidden><div class="modal-body" id="modal-body"></div></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
