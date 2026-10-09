@@ -30,7 +30,7 @@ python3 -m http.server 8080   # then open http://localhost:8080
 - **Levels** — every bet earns XP; each level adds +2% winnings.
 - **Vinnie the loan shark** — borrow when you're broke. Pay within 20 minutes or he collects.
 - **Golden chips** fly across the screen — click them for cash, income frenzies, luck or free crates.
-- **Daily wheel**, **41 achievements** (+2% everything each), **stats**.
+- **Daily wheel**, **42 achievements** (+2% everything each), **stats**.
 - **Fold (prestige)** — reset your run for Aces and buy permanent upgrades.
 
 ## Saving

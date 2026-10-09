@@ -340,7 +340,10 @@ const crash = {
           <div class="crash-mult" id="cmult">1.00×</div>
           <div class="crash-rocket" id="crocket">🚀</div>
         </div>
-        <label class="auto-cash">Auto cash-out at <input id="cauto" inputmode="decimal" placeholder="off" size="6" />×</label>
+        <div class="auto-row">
+          <label class="auto-cash">Auto cash-out at <input id="cauto" inputmode="decimal" placeholder="off" size="6" />×</label>
+          <button class="btn-ghost" id="cauto-run" title="Relaunch right after every cash-out or crash. Needs an auto cash-out value.">Auto-launch: off</button>
+        </div>
       </div>
       ${betBox('crash', '<button class="btn-play" id="cbet">Launch</button><button class="btn-cash" id="ccash" disabled>Cash out</button>')}`;
     const bet = bindBet(root, 'crash');
@@ -362,9 +365,9 @@ const crash = {
       lockAll(root, false); $(root, '#cauto').disabled = false; $(root, '#ccash').disabled = true; bet.update();
     };
     this.cashNow = () => { if (this.run) stop(true); };
-    $(root, '#cbet').addEventListener('click', () => {
-      if (this.run) return;
-      const amt = bet.take(); if (!amt) return;
+    const launch = () => {
+      if (this.run) return false;
+      const amt = bet.take(); if (!amt) return false;
       let cp = crashPoint();
       for (let n = C.retries(); n > 0; n--) cp = Math.max(cp, crashPoint());   // luck: the rocket keeps the best roll
       const autoX = parseFloat($(root, '#cauto').value) || 0;
@@ -386,10 +389,31 @@ const crash = {
         r.raf = requestAnimationFrame(frame);
       };
       this.run.raf = requestAnimationFrame(frame);
-    });
+      return true;
+    };
+    $(root, '#cbet').addEventListener('click', launch);
     $(root, '#ccash').addEventListener('click', () => this.cashNow());
+    // auto-launch: relaunch after every cash-out / crash until you switch it off or run out of chips
+    let auto = false;
+    const autoBtn = $(root, '#cauto-run');
+    this.stopAuto = () => { auto = false; };
+    autoBtn.addEventListener('click', async () => {
+      if (auto) { auto = false; autoBtn.textContent = 'Auto-launch: off'; return; }
+      if (!(parseFloat($(root, '#cauto').value) >= 1.01)) {
+        ui.toast('Set an auto cash-out (e.g. 2) first, otherwise every auto launch would just crash.', 'bad'); ui.sfx('nope'); return;
+      }
+      auto = true; autoBtn.textContent = 'Auto-launch: on';
+      while (auto && document.body.contains(root)) {
+        if (!this.run && !launch()) break;
+        while (this.run && auto && document.body.contains(root)) await sleep(60);
+        if (!auto) break;
+        await sleep(fast() ? 150 : 600);
+      }
+      auto = false;
+      if (document.body.contains(root)) autoBtn.textContent = 'Auto-launch: off';
+    });
   },
-  destroy() { this.cashNow?.(); },
+  destroy() { this.stopAuto?.(); this.cashNow?.(); },
 };
 
 // ═════════════════════════════════════════════════════════════════════════════

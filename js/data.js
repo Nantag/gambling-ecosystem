@@ -162,6 +162,8 @@ export const ACHIEVEMENTS = [
   { id: 'jackpot',   name: 'Jackpot',            desc: 'Hit 7-7-7 on the slots.',             check: s => s.stats.jackpots >= 1 },
   { id: 'prestige',  name: 'Fold',               desc: 'Prestige once.',                      check: s => s.prestiges >= 1 },
   { id: 'prestige5', name: 'The House',          desc: 'Prestige five times.',                check: s => s.prestiges >= 5 },
+  // must stay last: it needs every other achievement
+  { id: 'all',       name: 'Completionist',      desc: 'Unlock every other achievement.',     check: s => ACHIEVEMENTS.every(a => a.id === 'all' || s.ach[a.id]) },
 ];
 
 export function totalBiz(s) { return Object.values(s.biz).reduce((a, b) => a + b, 0); }
