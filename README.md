@@ -31,7 +31,7 @@ python3 -m http.server 8080   # then open http://localhost:8080
 - **Vinnie the loan shark** — borrow when you're broke. Pay within 20 minutes or he collects.
 - **Golden chips** fly across the screen — click them for cash, income frenzies, luck or free crates.
 - **Daily wheel**, **42 achievements** (+2% everything each), **stats**. Unlock them all for a fireworks finale and permanent Completionist bonuses (×2 winnings and income, ×1.25 luck, +100 Aces, a golden crown).
-- **Fold (prestige)** — reset your run for Aces and buy permanent upgrades.
+- **Fold (prestige)** — reset your run for Aces and buy permanent upgrades, including luck multipliers, crate luck (Charm Magnet), bulk/instant crates (Instant Roll) and an amplifier for one chosen charm.
 
 ## Saving
 

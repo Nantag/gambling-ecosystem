@@ -445,6 +445,17 @@ body.still .golden { animation: fly 13s linear forwards !important; }
 .inc-choice:disabled { opacity: .45; }
 
 
+/* ── Crates: bulk + amplifier ────────────────────────────────────────────── */
+.bulk { display: flex; gap: .4rem; margin-top: .5rem; justify-content: center; }
+.bulk .btn-ghost { padding: .45rem .9rem; font-size: .85rem; }
+.spot { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .8rem 0 .2rem; font-size: .88rem; }
+.spot select { background: var(--panel2); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: .35rem .5rem; max-width: 100%; }
+.bulk-list { display: grid; gap: .35rem; margin: .8rem 0; max-height: 50vh; overflow: auto; text-align: left; }
+.bulk-row { display: grid; grid-template-columns: 32px 1fr auto auto auto; gap: .6rem; align-items: center; padding: .4rem .6rem; border-radius: 10px; background: var(--panel2); border-left: 4px solid var(--rc); font-size: .88rem; }
+.bulk-row .ci { font-size: 1.3rem; }
+.bulk-row em { font-style: normal; font-size: .7rem; font-weight: 800; color: #052e16; background: var(--green); border-radius: 6px; padding: 0 .35rem; }
+.bulk-row i { font: 700 .95rem var(--mono); font-style: normal; color: var(--gold2); min-width: 2.5ch; text-align: right; }
+
 /* ── Completionist finale ────────────────────────────────────────────────── */
 .celebrate { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 1rem; background: radial-gradient(ellipse at center, rgba(20,14,0,.8), rgba(0,0,0,.92)); animation: celIn .6s ease-out; overflow: auto; }
 .celebrate.out { opacity: 0; transition: opacity .5s; }

@@ -102,6 +102,9 @@ export const ACE_SHOP = [
   { id: 'pockets', name: 'Deep Pockets',    icon: '👖', base: 5, max: 3,  desc: l => `${3 + l} charm slots.` },
   { id: 'sleep',   name: 'Insomniac',       icon: '🌙', base: 1, max: 10, desc: l => `+${l * 2}h offline earnings cap.` },
   { id: 'vip',     name: 'VIP Card',        icon: '💳', base: 4, max: 3,  desc: l => `Start runs with ${['the Back Alley', 'the Neon Arcade', 'the Riverboat', 'the Vegas Strip'][l]} unlocked.` },
+  { id: 'charmluck', name: 'Charm Magnet',    icon: '🧿', base: 30,  max: 10, desc: l => `Crates favour rare charms: rarity odds tilt +${(l * 35)}% per tier (stacks with venues).` },
+  { id: 'instaroll', name: 'Instant Roll',    icon: '⚡', base: 150, max: 3,  desc: l => ['Crates open instantly: no reel animation.', 'Instant crates + an "Open ×10" button.', 'Instant crates + "Open ×10" and "Open ×50" buttons.'][Math.max(0, l - 1)] || 'Skip the crate reel. Higher levels add bulk-open buttons.' },
+  { id: 'spotlight', name: 'Charm Amplifier', icon: '🔦', base: 80,  max: 5,  desc: l => `Pick one charm: its effect is multiplied ×${1 + l}. Works on luck charms.` },
   { id: 'haggle',  name: 'Crate Haggler',   icon: '🏷️', base: 2, max: 5,  desc: l => `Crates cost ${l * 10}% less.` },
 ];
 

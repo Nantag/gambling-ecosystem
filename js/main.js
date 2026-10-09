@@ -480,6 +480,7 @@ PANELS.crates = () => {
     <div class="crate-box">
       <div class="crate-art">📦</div>
       <button class="btn-play" id="open-crate">Open crate<br><b id="crate-cost">${M(C.crateCost())}</b></button>
+      ${C.bulkSizes().length ? `<div class="bulk">${C.bulkSizes().map(n => `<button class="btn-ghost" data-bulk="${n}">Open ×${n}</button>`).join('')}</div>` : ''}
       <div class="odds-list">${RARITIES.map(r => `<span style="color:${r.color}">${r.name}</span>`).join(' · ')}</div>
     </div>
     <div class="equipped">
@@ -488,6 +489,8 @@ PANELS.crates = () => {
         const id = C.S.equipped[i]; const c = id && C.charmDef(id);
         return c ? `<button class="slot full" data-unequip="${id}" style="--rc:${C.rarity(c.r).color}" title="Click to unequip">${c.icon}<small>Lv ${C.S.charms[id]}</small></button>` : `<div class="slot">empty</div>`;
       }).join('')}</div>
+      ${C.aceLvl('spotlight') ? `<label class="spot">🔦 Amplified charm (×${1 + C.aceLvl('spotlight')}):
+        <select id="spot"><option value="">— none —</option>${owned.map(c => `<option value="${c.id}" ${C.S.spotlight === c.id ? 'selected' : ''}>${c.icon} ${esc(c.name)}</option>`).join('')}</select></label>` : ''}
       <p class="muted small">Luck: <b>${(C.luck() * 100).toFixed(1)}%</b> (max ${LUCK_CAP}%) · luck gives losing bets a second chance. Above 100% you get extra re-rolls, the rocket flies higher and slots hit 777 more often.</p>
     </div>
   </div>
@@ -497,18 +500,20 @@ PANELS.crates = () => {
       const lvl = C.S.charms[c.id] || 0, r = C.rarity(c.r), on = C.S.equipped.includes(c.id);
       return lvl ? `<button class="charm ${on ? 'on' : ''}" data-equip="${c.id}" style="--rc:${r.color}">
           <span class="ci">${c.icon}</span><b>${esc(c.name)}</b><span class="lv">Lv ${lvl}${lvl >= CHARM_MAX_LEVEL ? ' MAX' : ''}</span>
-          <span class="eff">${effectText(c, lvl)}</span><span class="rt" style="color:${r.color}">${r.name}${on ? ' · equipped' : ''}</span></button>`
+          <span class="eff">${effectText(c, lvl)}</span><span class="rt" style="color:${r.color}">${r.name}${on ? ' · equipped' : ''}${C.charmAmp(c.id) > 1 ? ' · 🔦 ×' + C.charmAmp(c.id) : ''}</span></button>`
         : `<div class="charm unknown" style="--rc:${r.color}"><span class="ci">?</span><b>???</b><span class="rt" style="color:${r.color}">${r.name}</span></div>`;
     }).join('')}
   </div>`;
 };
 function effectText(c, lvl) {
-  const v = +(c.value * lvl).toFixed(1);
+  const v = +(c.value * lvl * C.charmAmp(c.id)).toFixed(1);
   if (c.kind.startsWith('profit:')) { const g = c.kind.split(':')[1]; return `+${v}% ${g === 'all' ? 'all winnings' : C.gameDef(g).name + ' winnings'}`; }
   return { luck: `+${v}% luck`, idle: `+${v}% casino income`, xp: `+${v}% XP`, offline: `+${v}h offline cap`, loan: `−${v}% loan interest` }[c.kind];
 }
 MOUNT.crates = main => {
-  $('#open-crate').addEventListener('click', openCrate);
+  $('#open-crate').addEventListener('click', () => openCrate());
+  main.querySelectorAll('[data-bulk]').forEach(b => b.addEventListener('click', () => openMany(+b.dataset.bulk)));
+  $('#spot')?.addEventListener('change', e => { C.S.spotlight = e.target.value || null; sfx('buy'); refresh(); render(); });
   main.querySelectorAll('[data-equip]').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.equip, eq = C.S.equipped;
     if (eq.includes(id)) eq.splice(eq.indexOf(id), 1);
@@ -523,8 +528,36 @@ MOUNT.crates = main => {
 };
 
 let crateBusy = false;
+// Instant Roll: open n crates at once with a summary instead of the reel.
+function openMany(n, free = false) {
+  const tally = new Map(); let bought = 0, melted = 0;
+  while (bought < n) {
+    const cost = free ? 0 : C.crateCost();
+    if (C.S.chips < cost) break;
+    C.S.chips -= cost; if (!free) C.S.cratesBought++;
+    const prize = C.rollCharm(); C.S.stats.crates++; bought++;
+    const res = C.grantCharm(prize);
+    if (res.maxed && cost) { C.earn(cost * 0.5); melted += cost * 0.5; }
+    const t = tally.get(prize.id) || { c: prize, n: 0, isNew: false }; t.n++; t.isNew ||= res.isNew; tally.set(prize.id, t);
+  }
+  if (!bought) { toast('Not enough chips for a crate.', 'bad'); sfx('nope'); return; }
+  const order = RARITIES.map(r => r.id);
+  const rows = [...tally.values()].sort((a, b) => order.indexOf(b.c.r) - order.indexOf(a.c.r) || b.n - a.n);
+  const top = rows[0].c.r;
+  if (top === 'L' || top === 'E') { sfx('big'); confetti(top === 'L' ? 150 : 60); } else sfx('win');
+  modal(`<h2>📦 ${bought} crate${bought > 1 ? 's' : ''} opened</h2>
+    <div class="bulk-list">${rows.map(t => `<div class="bulk-row" style="--rc:${C.rarity(t.c.r).color}"><span class="ci">${t.c.icon}</span><b>${esc(t.c.name)}</b>
+      <span style="color:${C.rarity(t.c.r).color}">${C.rarity(t.c.r).name}</span>${t.isNew ? '<em>NEW</em>' : ''}<i>×${t.n}</i></div>`).join('')}</div>
+    ${melted ? `<p class="muted small">Maxed duplicates melted into ${M(melted)}.</p>` : ''}
+    <div class="modal-actions"><button class="btn-ghost" id="m-close">Close</button>${!free ? `<button class="btn-play" id="m-again">Open ${bought} more (${M(C.crateCost())} each)</button>` : ''}</div>`);
+  $('#m-close').addEventListener('click', () => { closeModal(); if (tab === 'crates') render(); });
+  $('#m-again')?.addEventListener('click', () => { closeModal(); openMany(bought); });
+  achievements(); refresh();
+}
+
 async function openCrate(free = false) {
   if (crateBusy) return;
+  if (C.aceLvl('instaroll') > 0) return openMany(1, free);
   const cost = C.crateCost();
   if (!free) {
     if (C.S.chips < cost) { toast('Not enough chips for a crate.', 'bad'); sfx('nope'); return; }

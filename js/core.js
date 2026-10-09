@@ -141,12 +141,17 @@ export const rarity = id => RARITIES.find(r => r.id === id);
 export const aceLvl = id => S.ace[id] || 0;
 export const charmSlots = () => 3 + aceLvl('pockets');
 
+// Charm Amplifier (Fold shop): the chosen charm's effect is multiplied.
+export const charmAmp = id => (S.spotlight === id && aceLvl('spotlight') > 0) ? 1 + aceLvl('spotlight') : 1;
+// Instant Roll (Fold shop): 1 = no animation, 2 adds ×10, 3 adds ×50.
+export const bulkSizes = () => [aceLvl('instaroll') >= 2 && 10, aceLvl('instaroll') >= 3 && 50].filter(Boolean);
+
 export function mods() {
   const m = { profit: { all: 0 }, luck: 0, idle: 0, xp: 0, offline: 0, loan: 0 };
   for (const id of S.equipped) {
     const c = charmDef(id); const lvl = S.charms[id] || 0;
     if (!c || !lvl) continue;
-    const v = c.value * lvl;
+    const v = c.value * lvl * charmAmp(id);
     if (c.kind.startsWith('profit:')) { const g = c.kind.split(':')[1]; m.profit[g] = (m.profit[g] || 0) + v; }
     else m[c.kind] += v;
   }
@@ -378,7 +383,7 @@ export function crateCost() {
 
 // Better venues tilt crate odds toward rare charms
 export function rollCharm() {
-  const tilt = S.venue * 0.12;
+  const tilt = S.venue * 0.12 + aceLvl('charmluck') * 0.35;
   const weights = RARITIES.map((r, i) => ({ ...r, weight: r.weight * (1 + tilt * i) }));
   const r = weighted(weights);
   return pick(CHARMS.filter(c => c.r === r.id));
@@ -442,7 +447,7 @@ export function fold() {
   const keep = {
     aces: S.aces + gain, prestiges: S.prestiges + 1, ace: S.ace, charms: S.charms, equipped: S.equipped,
     ach: S.ach, stats: S.stats, settings: S.settings, allTimeEarned: S.allTimeEarned,
-    level: S.level, xp: S.xp, lastWheel: S.lastWheel, created: S.created,
+    level: S.level, xp: S.xp, lastWheel: S.lastWheel, created: S.created, spotlight: S.spotlight,
   };
   S = { ...newState(), ...keep };
   S.chips = 100 * 10 ** aceLvl('seed');
