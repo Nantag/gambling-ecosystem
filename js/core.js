@@ -160,7 +160,7 @@ export function mods() {
   m.levelBonus = (S.level - 1) * 2;        // +2% winnings per level
   m.luck += aceLvl('lucky');
   for (const b of S.buffs) if (b.kind === 'luck' && b.until > Date.now()) m.luck += b.value;
-  m.luck = Math.min(LUCK_CAP, m.luck);
+  m.luck = Math.min(LUCK_CAP, m.luck * (1 + aceLvl('fortune') * 0.5));
   return m;
 }
 
@@ -175,10 +175,15 @@ export function profitMult(game) {
     * (1 + aceLvl('stakes') * 0.25);
 }
 
-export const luck = () => mods().luck / 100;   // 0 … 0.25
+export const luck = () => mods().luck / 100;   // 1.0 = 100%, up to LUCK_CAP
 
 // "Second chance": after a loss, re-roll with probability = luck
 export const secondChance = () => Math.random() < luck();
+// Luck above 100% stacks: 250% = 2 guaranteed re-rolls + a 50% chance of a third.
+export function retries() {
+  const l = Math.min(luck(), 20);
+  return Math.floor(l) + (Math.random() < l % 1 ? 1 : 0);
+}
 
 // ── Businesses ───────────────────────────────────────────────────────────────
 export const bizCount = id => S.biz[id] || 0;

@@ -100,7 +100,7 @@ const coin = {
       const amt = bet.take(); if (!amt) return;
       busy = true; lockAll(root, true); ui.sfx('spin');
       let win = Math.random() < 0.48;
-      if (!win && C.secondChance()) win = true;
+      for (let n = C.retries(); !win && n > 0; n--) win = Math.random() < 0.48;
       const result = win ? side : side === 'heads' ? 'tails' : 'heads';
       rot += 1800 + (result === 'tails' ? 180 : 0) - (rot % 360);
       const el = $(root, '#coin');
@@ -173,7 +173,7 @@ const scratch = {
       if (this.card) return;
       const amt = bet.take(); if (!amt) return;
       let win = scratchOutcome();
-      if (!win && C.secondChance()) win = scratchOutcome();
+      for (let n = C.retries(); !win && n > 0; n--) win = scratchOutcome();
       this.card = { bet: amt, win, cells: scratchLayout(win), open: Array(9).fill(false) };
       lockAll(root, true); $(root, '#reveal').disabled = false; ui.sfx('card');
       draw();
@@ -218,7 +218,9 @@ const slots = {
       const amt = bet.take(); if (!amt) return false;
       busy = true; $(root, '#spin').disabled = true; ui.sfx('spin');
       let res = [reelPick(), reelPick(), reelPick()];
-      if (slotPay(res) === 0 && C.secondChance()) res = [reelPick(), reelPick(), reelPick()];
+      for (let n = C.retries(); slotPay(res) === 0 && n > 0; n--) res = [reelPick(), reelPick(), reelPick()];
+      // luck also feeds the jackpot: 1% of luck per spin (100% luck = 1 in 100 spins)
+      if (Math.random() < C.luck() * 0.01) res = [REEL[5], REEL[5], REEL[5]];
       for (let i = 0; i < 3; i++) {
         const strip = $(root, `#reel${i} .strip`);
         const frames = fast() ? 1 : 8 + i * 6;
@@ -364,7 +366,7 @@ const crash = {
       if (this.run) return;
       const amt = bet.take(); if (!amt) return;
       let cp = crashPoint();
-      if (cp < 2 && C.secondChance()) cp = Math.max(cp, crashPoint());
+      for (let n = C.retries(); n > 0; n--) cp = Math.max(cp, crashPoint());   // luck: the rocket keeps the best roll
       const autoX = parseFloat($(root, '#cauto').value) || 0;
       const t0 = performance.now(); const pts = [];
       this.run = { bet: amt, cp, m: 1, t0, raf: 0 };
@@ -438,7 +440,7 @@ const roulette = {
       busy = true; lockAll(root, true); ui.sfx('spin');
       const rb = rouletteBet(target);
       let n = Math.floor(Math.random() * 37);
-      if (!rb.hit(n) && C.secondChance()) n = Math.floor(Math.random() * 37);
+      for (let k = C.retries(); !rb.hit(n) && k > 0; k--) n = Math.floor(Math.random() * 37);
       const seq = Array.from({ length: 44 }, () => Math.floor(Math.random() * 37));
       seq.push(n, ...Array.from({ length: 6 }, () => Math.floor(Math.random() * 37)));
       strip.style.transition = 'none'; strip.style.transform = 'translateX(0)';

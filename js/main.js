@@ -461,7 +461,7 @@ PANELS.crates = () => {
         const id = C.S.equipped[i]; const c = id && C.charmDef(id);
         return c ? `<button class="slot full" data-unequip="${id}" style="--rc:${C.rarity(c.r).color}" title="Click to unequip">${c.icon}<small>Lv ${C.S.charms[id]}</small></button>` : `<div class="slot">empty</div>`;
       }).join('')}</div>
-      <p class="muted small">Luck: <b>${(C.luck() * 100).toFixed(1)}%</b> of ${LUCK_CAP}% max · luck gives losing bets a second chance.</p>
+      <p class="muted small">Luck: <b>${(C.luck() * 100).toFixed(1)}%</b> (max ${LUCK_CAP}%) · luck gives losing bets a second chance. Above 100% you get extra re-rolls, the rocket flies higher and slots hit 777 more often.</p>
     </div>
   </div>
   <h3 class="sub">Collection <span class="muted">${owned.length}/${CHARMS.length}</span></h3>

@@ -26,7 +26,7 @@ python3 -m http.server 8080   # then open http://localhost:8080
 - **Upgrades** — one-time purchases for the casino (income, reputation, visitors, security, salaries), for each business (×2 tiers at 10/25/50 owned), and for you (luck, table limits, per-game winnings).
 - **7 venues** — unlock new games, higher table limits and bigger winnings multipliers.
 - **Crates & charms** — 20 charms in 5 rarities from a spinning loot reel. Duplicates level them up. Equip up to 3 (6 with upgrades).
-- **Luck** — gives losing bets a second chance (capped at 25%).
+- **Luck** — gives losing bets a second chance. Fold for **Fortune's Favor** to multiply it; above 100% you get extra re-rolls, the rocket flies higher and slots hit 777 more often.
 - **Levels** — every bet earns XP; each level adds +2% winnings.
 - **Vinnie the loan shark** — borrow when you're broke. Pay within 20 minutes or he collects.
 - **Golden chips** fly across the screen — click them for cash, income frenzies, luck or free crates.

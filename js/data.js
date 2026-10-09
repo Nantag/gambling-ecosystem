@@ -89,7 +89,7 @@ export const CHARMS = [
   { id: 'dragon',   name: 'Jade Dragon',           icon: '🐉', r: 'L', kind: 'luck',          value: 4 },
 ];
 export const CHARM_MAX_LEVEL = 10;
-export const LUCK_CAP = 25;   // % points
+export const LUCK_CAP = 1000;   // % points (100% = one guaranteed re-roll)
 
 // ── Prestige: "Fold Everything" for Aces ─────────────────────────────────────
 export const ACE_DIVISOR = 1e6;           // aces = floor(sqrt(runEarnings / ACE_DIVISOR))
@@ -98,6 +98,7 @@ export const ACE_SHOP = [
   { id: 'stakes',  name: 'Table Stakes',    icon: '📈', base: 1, max: 50, desc: l => `+${l * 25}% to all winnings.` },
   { id: 'passive', name: 'Silent Partner',  icon: '🤝', base: 1, max: 50, desc: l => `+${l * 25}% casino income.` },
   { id: 'lucky',   name: 'Born Lucky',      icon: '🍀', base: 2, max: 10, desc: l => `+${l}% luck.` },
+  { id: 'fortune', name: "Fortune's Favor", icon: '🔮', base: 3, max: 20, desc: l => `Luck ×${(1 + l * 0.5).toFixed(1)}. Past 100% luck you get extra re-rolls, a better rocket and more jackpots.` },
   { id: 'pockets', name: 'Deep Pockets',    icon: '👖', base: 5, max: 3,  desc: l => `${3 + l} charm slots.` },
   { id: 'sleep',   name: 'Insomniac',       icon: '🌙', base: 1, max: 10, desc: l => `+${l * 2}h offline earnings cap.` },
   { id: 'vip',     name: 'VIP Card',        icon: '💳', base: 4, max: 3,  desc: l => `Start runs with ${['the Back Alley', 'the Neon Arcade', 'the Riverboat', 'the Vegas Strip'][l]} unlocked.` },
