@@ -5,6 +5,7 @@ import {
 } from './data.js';
 import { GAME_UI, initGames } from './games.js';
 import * as INC from './incidents.js';
+import { celebrate } from './celebrate.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -35,6 +36,7 @@ function sfx(kind) {
       cash: () => [880, 1320].forEach((f, i) => tone(f, i * 0.06, 0.08, 'square', 0.04)),
       buy: () => tone(700, 0, 0.06, 'triangle', 0.05),
       nope: () => tone(110, 0, 0.12, 'square', 0.04),
+      fanfare: () => [392, 523, 659, 784, 1046, 784, 1046, 1318, 1568].forEach((f, i) => { tone(f, i * 0.11, 0.35, 'triangle', 0.07); tone(f / 2, i * 0.11, 0.35, 'sine', 0.05); }),
       level: () => [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.09, 0.18, 'triangle', 0.06)),
     })[kind]?.();
   } catch { /* audio unavailable */ }
@@ -92,7 +94,31 @@ function afterBet(game, bet, payoutX, res, label) {
 C.onLevelUp(lvl => { sfx('level'); toast(`⬆️ Level <b>${lvl}</b> — winnings +${(lvl - 1) * 2}%`, 'level'); });
 
 function achievements() {
-  for (const a of C.checkAchievements()) { sfx('level'); toast(`🏆 <b>${esc(a.name)}</b> — ${esc(a.desc)} <small>(+2% everything)</small>`, 'ach'); }
+  for (const a of C.checkAchievements()) {
+    if (a.id === 'all') { finale(); continue; }
+    sfx('level'); toast(`🏆 <b>${esc(a.name)}</b> — ${esc(a.desc)} <small>(+2% everything)</small>`, 'ach'); }
+}
+
+function finale() {
+  C.grantCompletion(); C.save();
+  const s = C.S, n = Object.keys(s.ach).length;
+  celebrate({
+    motion: s.settings.motion, sfx,
+    html: `<div class="cel-crown">👑</div>
+      <div class="cel-kicker">Every achievement unlocked</div>
+      <h2>COMPLETIONIST</h2>
+      <p class="muted">${n} of ${ACHIEVEMENTS.length} achievements · ${C.duration(s.stats.played)} played · ${C.fmt(s.stats.bets)} bets · ${s.prestiges} Fold${s.prestiges === 1 ? '' : 's'}.<br>Nobody was supposed to get this far.</p>
+      <div class="cel-rewards">
+        <div><b>×${C.COMPLETION_MULT}</b><span>all winnings</span></div>
+        <div><b>×${C.COMPLETION_MULT}</b><span>casino income</span></div>
+        <div><b>×1.25</b><span>luck</span></div>
+        <div><b>+${C.COMPLETION_ACES}</b><span>Aces 🂡</span></div>
+        <div><b>👑</b><span>golden crown</span></div>
+      </div>
+      <p class="small muted">The bonuses are permanent and survive every Fold.</p>
+      <button class="btn-play big" data-close>Keep playing</button>`,
+    onClose: refresh,
+  });
 }
 
 // ── Top bar ──────────────────────────────────────────────────────────────────
@@ -105,6 +131,7 @@ function refresh() {
   $('#xpbar').parentElement.title = `${C.fmt(S.xp)} / ${C.fmt(C.xpNeeded(S.level))} XP`;
   $('#venue-name').textContent = VENUES[S.venue].icon + ' ' + VENUES[S.venue].name;
   $('#aces').textContent = S.aces;
+  document.body.classList.toggle('completionist', !!S.ach.all);
   $('#aces-wrap').hidden = !S.aces && !S.prestiges;
   const debt = $('#debt');
   debt.hidden = !S.loan.debt;
@@ -694,7 +721,7 @@ PANELS.ach = () => {
   const n = Object.keys(C.S.ach).length;
   return `
   <div class="panel-head"><div><h2>🏆 Achievements <span class="muted">${n}/${ACHIEVEMENTS.length}</span></h2><p class="muted">Each one gives +2% to all winnings and casino income. Currently <b>+${n * 2}%</b>.</p></div></div>
-  <div class="ach-grid">${ACHIEVEMENTS.map(a => `<div class="ach ${C.S.ach[a.id] ? 'got' : ''}"><span>${C.S.ach[a.id] ? '🏆' : '🔒'}</span><div><b>${esc(a.name)}</b><div class="muted small">${esc(a.desc)}</div></div></div>`).join('')}</div>`;
+  <div class="ach-grid">${ACHIEVEMENTS.map(a => `<div class="ach ${C.S.ach[a.id] ? 'got' : ''} ${a.id === 'all' ? 'crown' : ''}"><span>${C.S.ach[a.id] ? (a.id === 'all' ? '👑' : '🏆') : '🔒'}</span><div><b>${esc(a.name)}</b><div class="muted small">${esc(a.desc)}</div></div></div>`).join('')}</div>`;
 };
 
 // ── Stats ────────────────────────────────────────────────────────────────────

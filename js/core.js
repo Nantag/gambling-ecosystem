@@ -160,7 +160,7 @@ export function mods() {
   m.levelBonus = (S.level - 1) * 2;        // +2% winnings per level
   m.luck += aceLvl('lucky');
   for (const b of S.buffs) if (b.kind === 'luck' && b.until > Date.now()) m.luck += b.value;
-  m.luck = Math.min(LUCK_CAP, m.luck * (1 + aceLvl('fortune') * 0.5));
+  m.luck = Math.min(LUCK_CAP, m.luck * (1 + aceLvl('fortune') * 0.5) * (S.ach.all ? 1.25 : 1));
   return m;
 }
 
@@ -172,7 +172,8 @@ export function profitMult(game) {
     * (1 + (m.profit.all + (m.profit[game] || 0)) / 100)
     * (1 + m.levelBonus / 100)
     * (1 + m.ach / 100)
-    * (1 + aceLvl('stakes') * 0.25);
+    * (1 + aceLvl('stakes') * 0.25)
+    * (S.ach.all ? COMPLETION_MULT : 1);
 }
 
 export const luck = () => mods().luck / 100;   // 1.0 = 100%, up to LUCK_CAP
@@ -203,7 +204,7 @@ export const nextMilestone = id => BIZ_MILESTONES.find(m => bizCount(id) < m);
 
 export function idleMult() {
   const m = mods();
-  let x = (1 + m.idle / 100) * (1 + m.ach / 100) * (1 + aceLvl('passive') * 0.25);
+  let x = (1 + m.idle / 100) * (1 + m.ach / 100) * (1 + aceLvl('passive') * 0.25) * (S.ach.all ? COMPLETION_MULT : 1);
   for (const b of S.buffs) if (['frenzy', 'outage', 'rush'].includes(b.kind) && b.until > Date.now()) x *= b.value;
   return x;
 }
@@ -450,6 +451,12 @@ export function fold() {
 }
 
 // ── Achievements ─────────────────────────────────────────────────────────────
+// Completionist (every other achievement): permanent ×2 winnings & income, ×1.25 luck, a one-time Ace gift. Survives Folds.
+export const COMPLETION_MULT = 2;
+export const COMPLETION_ACES = 100;
+export const completionist = () => !!S.ach.all;
+export function grantCompletion() { S.aces += COMPLETION_ACES; }
+
 export function checkAchievements() {
   const fresh = [];
   for (const a of ACHIEVEMENTS) if (!S.ach[a.id] && a.check(S)) { S.ach[a.id] = Date.now(); fresh.push(a); }
