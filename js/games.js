@@ -361,8 +361,10 @@ const crash = {
       multEl.textContent = cashed ? `${r.m.toFixed(2)}× ✓` : `💥 ${r.cp.toFixed(2)}×`;
       if (!cashed) ui.sfx('boom'); else ui.sfx('cash');
       addHist(r.cp);
+      const done = this.onStop; this.onStop = null;
       finish('crash', r.bet, m, cashed ? `Cashed at ${r.m.toFixed(2)}×` : `Crashed at ${r.cp.toFixed(2)}×`);
       lockAll(root, false); $(root, '#cauto').disabled = false; $(root, '#ccash').disabled = true; bet.update();
+      done?.();
     };
     this.cashNow = () => { if (this.run) stop(true); };
     const launch = () => {
@@ -405,9 +407,7 @@ const crash = {
       auto = true; autoBtn.textContent = 'Auto-launch: on';
       while (auto && document.body.contains(root)) {
         if (!this.run && !launch()) break;
-        while (this.run && auto && document.body.contains(root)) await sleep(60);
-        if (!auto) break;
-        await sleep(fast() ? 150 : 600);
+        if (this.run) await new Promise(res => { this.onStop = res; });   // relaunch the instant the round ends
       }
       auto = false;
       if (document.body.contains(root)) autoBtn.textContent = 'Auto-launch: off';
