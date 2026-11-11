@@ -153,6 +153,7 @@ export const ACHIEVEMENTS = [
   { id: 'legend',    name: 'Legendary',          desc: 'Find a Legendary charm.',             check: s => CHARMS.some(c => c.r === 'L' && s.charms[c.id]) },
   { id: 'allcharms', name: 'Collector',          desc: 'Find every charm.',                   check: s => CHARMS.every(c => s.charms[c.id]) },
   { id: 'maxcharm',  name: 'Polished',           desc: 'Level a charm to 10.',                check: s => Object.values(s.charms).some(l => l >= CHARM_MAX_LEVEL) },
+  { id: 'allmax',    name: 'Mint Condition',     desc: 'Level every charm to 10.',            check: s => CHARMS.every(c => (s.charms[c.id] || 0) >= CHARM_MAX_LEVEL) },
   { id: 'loan',      name: 'Friends in Low Places', desc: 'Borrow from Vinnie.',             check: s => s.stats.loans >= 1 },
   { id: 'collected', name: 'Thumbs Intact',      desc: 'Get collected by Vinnie.',            check: s => s.stats.collected >= 1 },
   { id: 'golden',    name: 'Shiny!',             desc: 'Grab a golden chip.',                 check: s => s.stats.golden >= 1 },
