@@ -24,7 +24,8 @@ python3 -m http.server 8080   # then open http://localhost:8080
   - **Staff**: hire dealers, cleaners, security, bartenders, lounge singers and promoters. Each one has a salary.
   - **Incidents**: every few minutes something happens and you pick what to do. Whales, card counters, robberies, health inspectors, celebrities, power outages, loaded dice, jackpots and tour buses. If you don't answer in 90s, your manager plays it safe.
 - **Upgrades** — one-time purchases for the casino (income, reputation, visitors, security, salaries), for each business (×2 tiers at 10/25/50 owned), and for you (luck, table limits, per-game winnings).
-- **7 venues** — unlock new games, higher table limits and bigger winnings multipliers.
+- **7 venues** — unlock new games, higher table limits and bigger winnings multipliers. The Void's table limit scales with your income (one minute of it).
+- **Winnings boost** — venue, charms, levels, achievements and Aces multiply the profit of every win; past ×10 the extra boost softens (square root), so it keeps growing without making every bet a sure fortune. Crash auto cash-out starts at 1.5×, and win streaks only count wins of 1.5× or more.
 - **Crates & charms** — 20 charms in 5 rarities from a spinning loot reel. Duplicates level them up. Equip up to 3 (6 with upgrades).
 - **Luck** — gives losing bets a second chance. Fold for **Fortune's Favor** to multiply it; above 100% you get extra re-rolls, the rocket flies higher and slots hit 777 more often.
 - **Levels** — every bet earns XP; each level adds +2% winnings.

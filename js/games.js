@@ -6,6 +6,9 @@ import * as C from './core.js';
 let ui;                      // { afterBet, toast, sfx, refresh }
 export const initGames = u => { ui = u; };
 
+// Crash: an auto cash-out under 1.5× with luck re-rolls was a risk-free money printer.
+export const CRASH_MIN_AUTO = 1.5, CRASH_MAX_REROLLS = 3;
+
 const $ = (root, s) => root.querySelector(s);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const fast = () => !C.S.settings.motion;
@@ -17,7 +20,7 @@ function betBox(game, actionsHtml) {
     <div class="betbox">
       <label class="bet-label" for="bet-${game}">Bet</label>
       <div class="bet-input">
-        <span>$</span><input id="bet-${game}" inputmode="decimal" autocomplete="off" value="${C.fmt(last)}" />
+        <span>$</span><input id="bet-${game}" inputmode="decimal" autocomplete="off" value="${C.fmt(last)}" data-exact="${last}" data-shown="${C.fmt(last)}" />
       </div>
       <div class="bet-quick">
         <button type="button" data-q="min">Min</button>
@@ -40,12 +43,14 @@ function bindBet(root, game) {
       : v > C.S.chips ? 'Not enough chips' : `Your wins are boosted ×${C.profitMult(game).toFixed(2)}`;
     hint.classList.toggle('bad', !(v >= 1 && v <= C.S.chips && v <= C.tableLimit()));
   };
-  const readRaw = () => Math.floor(C.parseAmount(input.value));
+  // Max/½/2× remember the exact amount: the box shows a rounded "2.32Sp", which could round above your balance
+  const readRaw = () => Math.floor(input.dataset.exact && input.value === input.dataset.shown ? +input.dataset.exact : C.parseAmount(input.value));
   root.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => {
     let v = readRaw(); if (!isFinite(v) || v < 1) v = 1;
     const q = b.dataset.q;
     v = q === 'min' ? 1 : q === 'half' ? Math.max(1, Math.floor(v / 2)) : q === 'double' ? v * 2 : C.maxBet();
-    input.value = C.fmt(Math.min(v, Math.max(1, C.maxBet())), 3);
+    const exact = Math.min(v, Math.max(1, C.maxBet()));
+    input.value = C.fmt(exact, 3); input.dataset.exact = exact; input.dataset.shown = input.value;
     ui.sfx('tick'); upd();
   }));
   input.addEventListener('input', upd);
@@ -341,7 +346,7 @@ const crash = {
           <div class="crash-rocket" id="crocket">🚀</div>
         </div>
         <div class="auto-row">
-          <label class="auto-cash">Auto cash-out at <input id="cauto" inputmode="decimal" placeholder="off" size="6" />×</label>
+          <label class="auto-cash">Auto cash-out at <input id="cauto" inputmode="decimal" placeholder="off" title="${CRASH_MIN_AUTO}× or more" size="6" />× <small class="muted">(min ${CRASH_MIN_AUTO}×)</small></label>
           <button class="btn-ghost" id="cauto-run" title="Relaunch right after every cash-out or crash. Needs an auto cash-out value.">Auto-launch: off</button>
         </div>
       </div>
@@ -371,7 +376,7 @@ const crash = {
       if (this.run) return false;
       const amt = bet.take(); if (!amt) return false;
       let cp = crashPoint();
-      for (let n = C.retries(); n > 0; n--) cp = Math.max(cp, crashPoint());   // luck: the rocket keeps the best roll
+      for (let n = Math.min(C.retries(), CRASH_MAX_REROLLS); n > 0; n--) cp = Math.max(cp, crashPoint());   // luck: the rocket keeps the best of a few rolls
       const autoX = parseFloat($(root, '#cauto').value) || 0;
       const t0 = performance.now(); const pts = [];
       this.run = { bet: amt, cp, m: 1, t0, raf: 0 };
@@ -381,7 +386,7 @@ const crash = {
         const r = this.run; if (!r) return;
         const t = (now - t0) / 1000 * (fast() ? 4 : 1);
         r.m = Math.floor(Math.exp(0.13 * t) * 100) / 100;
-        if (autoX >= 1.01 && r.m >= autoX && autoX <= r.cp) { r.m = autoX; return stop(true); }
+        if (autoX >= CRASH_MIN_AUTO && r.m >= autoX && autoX <= r.cp) { r.m = autoX; return stop(true); }
         if (r.m >= r.cp) { r.m = r.cp; return stop(false); }
         multEl.textContent = r.m.toFixed(2) + '×';
         const x = Math.min(400, t * 22), y = 200 - Math.min(190, Math.log(r.m) * 60);
@@ -401,8 +406,8 @@ const crash = {
     this.stopAuto = () => { auto = false; };
     autoBtn.addEventListener('click', async () => {
       if (auto) { auto = false; autoBtn.textContent = 'Auto-launch: off'; return; }
-      if (!(parseFloat($(root, '#cauto').value) >= 1.01)) {
-        ui.toast('Set an auto cash-out (e.g. 2) first, otherwise every auto launch would just crash.', 'bad'); ui.sfx('nope'); return;
+      if (!(parseFloat($(root, '#cauto').value) >= CRASH_MIN_AUTO)) {
+        ui.toast(`Set an auto cash-out of at least ${CRASH_MIN_AUTO}× first (e.g. 2).`, 'bad'); ui.sfx('nope'); return;
       }
       auto = true; autoBtn.textContent = 'Auto-launch: on';
       while (auto && document.body.contains(root)) {

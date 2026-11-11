@@ -19,7 +19,7 @@ export function weighted(list, key = 'weight') {
   return list[list.length - 1];
 }
 
-const SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+const SUFFIX = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'Ud', 'Dd', 'Td', 'Qad', 'Qid', 'Sxd', 'Spd', 'Ocd', 'Nod', 'Vg'];
 export function fmt(n, dec = 2) {
   if (n === Infinity) return '∞';
   if (!isFinite(n)) return '0';
@@ -28,19 +28,22 @@ export function fmt(n, dec = 2) {
   if (n < 1000) out = n < 10 && n % 1 ? n.toFixed(2) : Math.floor(n).toLocaleString('en-US');
   else {
     const tier = Math.min(SUFFIX.length - 1, Math.floor(Math.log10(n) / 3));
-    if (tier >= SUFFIX.length - 1 && n >= 1e36) out = n.toExponential(2);
+    if (n >= 10 ** (SUFFIX.length * 3)) out = n.toExponential(2);
     else out = (n / 10 ** (tier * 3)).toFixed(dec).replace(/\.?0+$/, '') + SUFFIX[tier];
   }
   return (neg ? '-' : '') + out;
 }
 export const money = (n, dec) => '$' + fmt(n, dec);
 
+// Reads "250", "1.5k", "2.32Sp", "4.5e40"... every suffix fmt() can print is accepted (any letter case).
+const SUFFIX_VALUE = Object.fromEntries(SUFFIX.slice(1).map((s, i) => [s.toLowerCase(), 10 ** ((i + 1) * 3)]));
+const SUFFIX_RE = new RegExp(`^(\\d*\\.?\\d+(?:e[+-]?\\d+)?)(${SUFFIX.slice(1).map(s => s.toLowerCase()).sort((a, b) => b.length - a.length).join('|')})?$`);
 export function parseAmount(str) {
   if (typeof str === 'number') return str;
-  const m = String(str).trim().toLowerCase().replace(/[$,\s]/g, '').match(/^(\d*\.?\d+)(k|m|b|t|qa|qi)?$/);
-  if (!m) { const n = Number(str); return isFinite(n) ? n : NaN; }
-  const mult = { k: 1e3, m: 1e6, b: 1e9, t: 1e12, qa: 1e15, qi: 1e18 }[m[2]] || 1;
-  return parseFloat(m[1]) * mult;
+  const m = String(str).trim().toLowerCase().replace(/[$,\s]/g, '').match(SUFFIX_RE);
+  if (!m) return NaN;
+  const n = parseFloat(m[1]) * (m[2] ? SUFFIX_VALUE[m[2]] : 1);
+  return isFinite(n) ? n : NaN;
 }
 
 export function duration(sec) {
@@ -112,11 +115,27 @@ function migrate(data) {
   s.sim = { ...freshSim(), ...(data.sim || {}) };
   s.sim.staff = { ...(s.sim.staff || {}) }; s.sim.upgrades = { ...(s.sim.upgrades || {}) };
   s.v = VERSION;
+  return sanitize(s);
+}
+
+// Infinity / NaN can't be stored in JSON (they come back as null and silently reset). Repair them on load and save.
+const num = (v, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
+function sanitize(s) {
+  s.runEarned = Math.max(0, num(s.runEarned));
+  s.allTimeEarned = Math.max(num(s.allTimeEarned), s.runEarned);
+  s.chips = Math.max(0, num(s.chips, Math.min(num(s.runEarned), 1e6)));
+  s.aces = Math.max(0, num(s.aces)); s.xp = Math.max(0, num(s.xp));
+  for (const k in s.stats) if (k !== 'perGame' && s.stats[k] !== undefined && typeof s.stats[k] !== 'object') s.stats[k] = num(s.stats[k]);
+  for (const g of Object.values(s.stats.perGame || {})) { g.bets = num(g.bets); g.net = num(g.net); }
+  if (!(num(s.loan?.debt) > 0)) s.loan = { debt: 0, principal: 0, takenAt: 0, deadline: 0, garnish: false };
+  else { s.loan.principal = num(s.loan.principal); }
+  for (const k in s.bets || {}) if (!(num(s.bets[k]) >= 1)) delete s.bets[k];
   return s;
 }
 
 export function save() {
   S.lastSeen = Date.now();
+  sanitize(S);
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); return true; } catch { return false; }
 }
 
@@ -171,8 +190,13 @@ export function mods() {
   return m;
 }
 
-// Multiplier applied to the PROFIT part of a winning bet
-export function profitMult(game) {
+// Multiplier applied to the PROFIT part of a winning bet.
+// Every bonus still counts, but past ×10 they soften (square root): stacked charms, levels, achievements and Aces
+// used to reach ×8,000+, which made every game a guaranteed fortune.
+export const BOOST_SOFTCAP = 10;
+const soften = m => (m <= BOOST_SOFTCAP ? m : BOOST_SOFTCAP * Math.sqrt(m / BOOST_SOFTCAP));
+export function profitMult(game) { return soften(profitMultRaw(game)); }
+function profitMultRaw(game) {
   const m = mods();
   const venue = VENUES[S.venue].mult;
   return venue
@@ -289,7 +313,11 @@ export function tickSim(dt) {
   S.sim.rep = r < t ? Math.min(t, r + step) : Math.max(t, r - step);
 }
 export const tableMult = () => ownedUpgrades().filter(u => u.kind === 'tablelimit').reduce((a, u) => a * u.value, 1);
-export const tableLimit = () => VENUES[S.venue].maxBet * tableMult();
+// The Void has no fixed limit: it scales with your income (one minute of it). A truly infinite limit let all-in bets
+// compound without end and broke Vinnie's loans and the daily wheel.
+export const VOID_LIMIT_FLOOR = 1e13, VOID_LIMIT_SECS = 60;
+export const venueMaxBet = v => isFinite(v.maxBet) ? v.maxBet : Math.max(VOID_LIMIT_FLOOR, incomePerSec() * VOID_LIMIT_SECS);
+export const tableLimit = () => venueMaxBet(VENUES[S.venue]) * tableMult();
 
 export function buyBiz(b, n = 1) {
   const cost = bizCost(b, n);
@@ -301,7 +329,7 @@ export function buyBiz(b, n = 1) {
 
 // ── Money ────────────────────────────────────────────────────────────────────
 export function earn(amount) {
-  if (!(amount > 0)) return;
+  if (!(amount > 0) || !isFinite(amount)) return;
   S.chips += amount;
   S.runEarned += amount;
   S.allTimeEarned += amount;
@@ -324,6 +352,7 @@ export function stake(game, amount) {
   return true;
 }
 
+export const STREAK_MIN_X = 1.5;
 // Settle a bet: payoutX = total return as a multiple of the stake (0 = lost, 1 = push, 2 = even money win…)
 // Returns { credited, profit, win }
 export function settle(game, amount, payoutX) {
@@ -335,6 +364,7 @@ export function settle(game, amount, payoutX) {
   if (payoutX > 0) {
     const rawProfit = amount * (payoutX - 1);
     profit = rawProfit > 0 ? rawProfit * profitMult(game) : rawProfit;
+    if (!isFinite(profit)) profit = 0;
     credited = amount + profit;
     S.chips += credited;
     if (profit > 0) { S.runEarned += profit; S.allTimeEarned += profit; }
@@ -345,8 +375,8 @@ export function settle(game, amount, payoutX) {
     st.won += profit;
     st.biggestWin = Math.max(st.biggestWin, profit);
     st.bestMult = Math.max(st.bestMult, payoutX);
-    st.streak++; st.loseStreak = 0;
-    st.bestStreak = Math.max(st.bestStreak, st.streak);
+    // tiny cash-outs (e.g. Crash at 1.1×) neither build nor break a streak
+    if (payoutX >= STREAK_MIN_X) { st.streak++; st.loseStreak = 0; st.bestStreak = Math.max(st.bestStreak, st.streak); }
   } else if (profit < 0) {
     st.lost += -profit;
     st.loseStreak++; st.streak = 0;
@@ -409,13 +439,13 @@ export function pruneBuffs() { S.buffs = S.buffs.filter(b => b.until > Date.now(
 
 // ── Loan shark ───────────────────────────────────────────────────────────────
 export const LOAN_TERM_MIN = 20;
-export const loanLimit = () => Math.max(500, incomePerSec() * 600, S.runEarned * 0.05, tableLimit() * 2);
+export const loanLimit = () => Math.max(500, incomePerSec() * 600, S.runEarned * 0.05, tableLimit() * 2);   // all finite now (see venueMaxBet)
 export const loanRatePerMin = () => 0.02 * (1 - Math.min(0.8, mods().loan / 100));
 
 export function borrow(amount) {
   amount = Math.floor(amount);
   const room = loanLimit() - S.loan.debt;
-  if (amount <= 0 || amount > room) return false;
+  if (!isFinite(amount) || !isFinite(room) || amount <= 0 || amount > room) return false;
   if (!S.loan.debt) { S.loan.takenAt = Date.now(); S.loan.deadline = Date.now() + LOAN_TERM_MIN * 60e3; }
   S.loan.debt += amount;
   S.loan.principal += amount;

@@ -575,9 +575,10 @@ async function openCrate(free = false) {
     <div id="crate-result" class="crate-result"></div>`, false);
   const strip = $('#reel');
   await new Promise(r => setTimeout(r, 40));
-  const item = strip.children[0].getBoundingClientRect().width + 8;
-  const view = strip.parentElement.getBoundingClientRect().width;
-  const off = 34 * item - view / 2 + item / 2 + (Math.random() - 0.5) * item * 0.5;
+  // offsetLeft/offsetWidth are layout values, so the popup's zoom-in animation can't skew them
+  // (getBoundingClientRect did, which made the reel stop several tiles before the prize).
+  const win = strip.children[34], view = strip.parentElement.clientWidth;
+  const off = win.offsetLeft + win.offsetWidth / 2 - view / 2 + (Math.random() - 0.5) * win.offsetWidth * 0.5;
   strip.style.transition = C.S.settings.motion ? 'transform 4s cubic-bezier(.1,.7,.15,1)' : 'none';
   strip.style.transform = `translateX(${-off}px)`;
   sfx('spin');
@@ -610,7 +611,7 @@ PANELS.venues = () => `
         <div class="v-icon">${owned || next ? v.icon : '🔒'}</div>
         <div class="v-info"><h3>${owned || next ? esc(v.name) : '???'}</h3>
           <p class="muted">${owned || next ? esc(v.blurb) : 'Keep climbing.'}</p>
-          <div class="v-stats"><span>Table limit <b>${M(v.maxBet)}</b></span><span>Winnings <b>×${v.mult}</b></span>${games.length ? `<span>Unlocks ${games.map(g => g.icon + ' ' + g.name).join(', ')}</span>` : ''}</div>
+          <div class="v-stats"><span>Table limit <b>${isFinite(v.maxBet) ? M(v.maxBet) : `${C.VOID_LIMIT_SECS / 60} min of income`}</b></span><span>Winnings <b>×${v.mult}</b></span>${games.length ? `<span>Unlocks ${games.map(g => g.icon + ' ' + g.name).join(', ')}</span>` : ''}</div>
         </div>
         ${owned ? `<span class="v-tag">${i === C.S.venue ? 'You are here' : 'Unlocked'}</span>` : next ? `<button class="btn-play" data-venue="${i}">Move in<br><b>${M(v.cost)}</b></button>` : ''}
       </div>`;
@@ -670,7 +671,7 @@ MOUNT.vinnie = main => {
 // ── Daily wheel ──────────────────────────────────────────────────────────────
 const wheelReward = w => {
   const ipm = C.incomePerSec() * 60;
-  const floor = VENUES[C.S.venue].maxBet * 0.5;
+  const floor = C.venueMaxBet(VENUES[C.S.venue]) * 0.5;
   return Math.max(ipm * w.amount, floor * Math.sqrt(w.amount));
 };
 PANELS.wheel = () => {
@@ -837,7 +838,7 @@ function spawnGolden() {
     C.S.stats.golden++;
     const r = C.weighted(GOLDEN);
     if (r.kind === 'cash') {
-      const amt = Math.max(C.incomePerSec() * 600, Math.min(C.S.chips * 0.15, C.incomePerSec() * 3600 + VENUES[C.S.venue].maxBet * 2), 50);
+      const amt = Math.max(C.incomePerSec() * 600, Math.min(C.S.chips * 0.15, C.incomePerSec() * 3600 + C.venueMaxBet(VENUES[C.S.venue]) * 2), 50);
       C.earn(amt); toast(`🪙 Golden chip! <b>+${M(amt)}</b>`, 'big');
     } else if (r.kind === 'frenzy') { C.addBuff('frenzy', 7, 40, '🔥 Income ×7'); toast('🪙 <b>Frenzy!</b> Casino income ×7 for 40s.', 'big'); }
     else if (r.kind === 'lucky') { C.addBuff('luck', 15, 45, '🍀 +15% luck'); toast('🪙 <b>Lucky streak!</b> +15% luck for 45s.', 'big'); }
