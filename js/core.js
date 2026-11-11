@@ -56,7 +56,7 @@ function freshStats() {
     streak: 0, bestStreak: 0, worstStreak: 0, loseStreak: 0,
     crates: 0, golden: 0, wheel: 0, loans: 0, collected: 0,
     bestCrash: 0, bestMinesTiles: 0, blackjacks: 0, zeroWins: 0, jackpots: 0,
-    perGame: {}, played: 0, broke: 0,
+    perGame: {}, played: 0, broke: 0, incidents: 0,   // incidents live in stats so Folds don't wipe them
   };
 }
 
@@ -104,6 +104,8 @@ function migrate(data) {
   const base = newState();
   const s = { ...base, ...data };
   s.stats = { ...freshStats(), ...(data.stats || {}) };
+  // older saves counted incidents in the casino sim (reset by every Fold): carry that count over
+  s.stats.incidents = Math.max(s.stats.incidents || 0, data.sim?.incidents || 0);
   s.loan = { ...base.loan, ...(data.loan || {}) };
   s.settings = { ...base.settings, ...(data.settings || {}) };
   s.buffs = (data.buffs || []).filter(b => b.until > Date.now());
@@ -278,7 +280,7 @@ export function addRep(d) { S.sim.rep = clamp(S.sim.rep + d, 0, 100); }
 export function simLog(icon, text) {
   (S.sim.log ||= []).unshift({ icon, text, at: Date.now() });
   S.sim.log.length = Math.min(S.sim.log.length, 8);
-  S.sim.incidents = (S.sim.incidents || 0) + 1;
+  S.stats.incidents = (S.stats.incidents || 0) + 1;
 }
 export function setEdge(v) { S.sim.edge = clamp(Math.round(v), EDGE_MIN, EDGE_MAX); }
 export function tickSim(dt) {

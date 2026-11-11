@@ -763,7 +763,7 @@ PANELS.stats = () => {
   const rows = [
     ['Bets placed', C.fmt(s.bets)], ['Total wagered', M(s.wagered)], ['Total won', M(s.won)], ['Total lost', M(s.lost)],
     ['Net from gambling', M(s.won - s.lost)], ['Biggest win', M(s.biggestWin)], ['Best multiplier', s.bestMult.toFixed(2) + '×'],
-    ['Best win streak', s.bestStreak], ['Worst losing streak', s.worstStreak], ['Crates opened', s.crates], ['Golden chips', s.golden],
+    ['Best win streak', s.bestStreak], ['Worst losing streak', s.worstStreak], ['Crates opened', s.crates], ['Golden chips', s.golden], ['Incidents handled', `${s.incidents || 0}${(s.incidents || 0) < 25 ? ' / 25' : ''}`],
     ['Earned this run', M(C.S.runEarned)], ['Earned all time', M(C.S.allTimeEarned)], ['Folds', C.S.prestiges], ['Time played', C.duration(s.played)],
   ];
   return `

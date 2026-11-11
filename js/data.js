@@ -132,7 +132,7 @@ export const ACHIEVEMENTS = [
   { id: 'payroll',   name: 'Payroll Department', desc: 'Employ 40 staff at once.',            check: s => Object.values(s.sim.staff).reduce((a, b) => a + b, 0) >= 40 },
   { id: 'renovator', name: 'Renovator',          desc: 'Own 10 upgrades.',                    check: s => Object.keys(s.sim.upgrades).length >= 10 },
   { id: 'fivestar',  name: 'Five Stars',         desc: 'Reach 90 reputation.',                check: s => s.sim.rep >= 90 },
-  { id: 'crisis',    name: 'Crisis Manager',     desc: 'Handle 25 incidents.',                check: s => (s.sim.incidents || 0) >= 25 },
+  { id: 'crisis',    name: 'Crisis Manager',     desc: 'Handle 25 incidents.',                check: s => (s.stats.incidents || 0) >= 25 },
   { id: 'win10x',    name: 'Ten Bagger',         desc: 'Win 10× your bet in one go.',         check: s => s.stats.bestMult >= 10 },
   { id: 'win100x',   name: 'Hundred Bagger',     desc: 'Win 100× your bet in one go.',        check: s => s.stats.bestMult >= 100 },
   { id: 'streak5',   name: 'On Fire',            desc: 'Win 5 bets in a row.',                check: s => s.stats.bestStreak >= 5 },
